@@ -1,6 +1,6 @@
 // AWS Dynamodb => Schema
 var _ = require('lodash');
-var uniqid = require('uniqid');
+var cuid = new require('cuid');
 var helpers = require('./helpers');
 var schemaCollection = {};
 
@@ -181,7 +181,7 @@ function validatePutData(table, data) {
     var _data = _.extend({}, data);
     var schema = _get(table);
     var automaticKeyDefault = {
-        S: uniqid(),
+        S: '-' + cuid(),
         N: +new Date,
         B: false
     };

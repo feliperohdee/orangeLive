@@ -22,20 +22,16 @@ function __construct() {
                     //Leave client from namespace
                     _leaveRoom(socket, params);
                 },
-                query: function () {
-                    // Execute query
-                    query(params);
-                },
-                item: function () {
+                get: function () {
                     // Execute get
-                    item(params);
+                    get(params);
                 },
                 set: function () {
                     // Execute set
                     set(params);
                 }
             };
-            
+
             // Exec operation
             operationFactory[operation]();
         });
@@ -59,8 +55,8 @@ function _leaveRoom(socket, params) {
 }
 
 // # Item
-function item(params) {
-    var query = dynamoGet.item('tblLiveOne');
+function _item(params) {
+    var query = dynamoGet.item('tblLive1');
 
     if (params.select)
         query.select(params.select);
@@ -75,12 +71,112 @@ function item(params) {
     });
 }
 
-// # Query
-function query(params) {
-    var query = dynamoGet.queryItems('tblLiveOne');
+// # get
+function get(params) {
+    // Define operation
+    if (params.namespace.indexOf('/') >= 0) {
+        // Item Operation
+        _.extend(params, {
+            namespace: params.namespace.split('/')[0],
+            key: params.namespace.split('/')[1]
+        });
 
-    if (params.asc)
-        query.asc(params.asc);
+        _item(params);
+    } else {
+        // Query Operation
+        _.extend(params.where, {
+            namespace: ['=', params.namespace]
+        });
+
+        if (params.index && params.useIndex) {
+            // Discover and get Index
+            params.indexedBy = _discoverIndex(params.index, params.useIndex);
+        }
+
+        _query(params);
+    }
+}
+
+// # Set
+function set(params) {
+    // Define namespace
+    if (params.namespace.indexOf('/') >= 0) {
+        // Custom Key
+        _.extend(params.set, {
+            namespace: params.namespace.split('/')[0],
+            key: params.namespace.split('/')[1]
+        });
+    } else {
+        // Default Key
+        _.extend(params.set, {
+            namespace: params.namespace
+        });
+    }
+
+    if (params.index) {
+        // Encode Index
+        params.set = _encodeIndexSet(params.index, params.set);
+    }
+
+    _insert(params);
+}
+
+// # Encode Index Set
+function _encodeIndexSet(index, set) {
+    var result = {};
+
+    // String Index
+    if (index.string) {
+        _.each(index.string, function (indexAttr, key) {
+            result['_si' + (key % 2)] = set[indexAttr]; // key % 2 guarantees 0 or 1
+        });
+    }
+
+    // Number Index
+    if (index.number) {
+        _.each(index.number, function (indexAttr, key) {
+            result['_ni' + (key % 2)] = set[indexAttr]; // key % 2 guarantees 0 or 1
+        });
+    }
+
+    return _.extend(set, result);
+}
+
+// # Discover Index
+function _discoverIndex(index, attr) {
+    var result = false;
+
+    // Discover Index
+    var string = index.string.indexOf(attr);
+    var number = index.number.indexOf(attr);
+
+    if (string >= 0) {
+        result = 'stringIndex' + string; // stringIndex0 or stringIndex1
+    }
+
+    if (number >= 0) {
+        result = 'numberIndex' + number; // numberIndex0 or numberIndex1
+    }
+
+    return result;
+}
+
+// # Query
+function _query(params) {
+
+    var query = dynamoGet.queryItems('tblLive1');
+
+    if (params.alias)
+        query.alias({
+            names: params.alias.names,
+            values: params.alias.values
+        });
+
+    if (params.desc)
+        query.desc();
+
+    if (params.filter)
+        query.withFilter(params.filter);
 
     if (params.indexedBy)
         query.indexedBy(params.indexedBy);
@@ -104,22 +200,22 @@ function query(params) {
     });
 }
 
-// # Set
-function set(params) {
-    var set = dynamoInsert.item('tblLiveOne');
+// # Insert
+function _insert(params) {
+    var insert = dynamoInsert.item('tblLive1');
 
     if (params.alias)
-        set.alias(params.alias);
+        insert.alias(params.alias);
 
     if (params.set)
-        set.set(params.set);
+        insert.set(params.set);
 
     if (params.withCondition)
-        set.withCondition(params.withCondition);
+        insert.withCondition(params.withCondition);
 
-    set.exec().then(function (result) {
-        io.to(params.namespace).emit('responseSuccess', 'set', result);
+    insert.exec().then(function (result) {
+        io.to(params.namespace).emit('responseSuccess', 'insert', result);
     }).catch(function (err) {
-        io.to(params.namespace).emit('responseError', 'set', err.message);
+        io.to(params.namespace).emit('responseError', 'insert', err.message);
     });
 }

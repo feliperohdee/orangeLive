@@ -11,20 +11,20 @@ var query = instance.on({
         console.log('on load');
 
         _.each(data, function (value) {
-            console.log(value.key, value.name, /*value.height, */value.age);
+            console.log(value.key, value.name, value.height, value.age);
         });
 
+    },
+    add: function (data) {
+        console.log('on add');
+        console.log(data.key, data.name, data.height, data.age);
     },
     dataUpdate: function (data) {
         console.log('on dataUpdate');
 
         _.each(data, function (value) {
-            console.log(value.key, value.name, /*value.height, */ value.age);
+            console.log(value.key, value.name, value.height, value.age);
         });
-    },
-    add: function (data) {
-        console.log('on add');
-        console.log(data.key, data.name, /*value.height, */ data.age);
     }
 }).limit(5).useIndex('age');
 

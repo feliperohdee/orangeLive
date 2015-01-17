@@ -4,7 +4,7 @@ var socket = io();
 function orangeLive(namespace) {
     //
     var index = false;
-    var onStack = [];
+    var onTasks = [];
 
     return{
         on: on,
@@ -29,7 +29,6 @@ function orangeLive(namespace) {
     // # On
     function on(operation) {
 
-        var firstOn = false;
         var query = {};
         var dataSet = [];
 
@@ -47,25 +46,32 @@ function orangeLive(namespace) {
 
         /*--------------------------------------*/
 
+        // ## Construct
         function __construct() {
-            // Append OnStack with {load, add, change, remove, dataUpdate}, and callback
+            // Append onTasks with {load, add, change, remove, dataUpdate}, and callback
             _.each(operation, function (callback, type) {
-                onStack.push({
+                onTasks.push({
                     type: type,
                     callback: callback
                 });
             });
-
-            if (!firstOn) {
-                _.debounce(_firstLoad, 500)();
-            }
-
+            
+            // Request join to namespace
+            _request('join');
+            
+            // Delay 500ms to first load
+            _.debounce(_load, 500)();
+            
+            // Start listen sockets
             _bindSockets();
         }
 
-        // # Bind Sockets
+        // ## Bind Sockets
         function _bindSockets() {
-            // # Response Success
+
+            var isLoadDispatched = false;
+
+            // ### Response Success
             socket.on('responseSuccess', function (operation, result) {
                 //
                 var operationFactory = {
@@ -76,14 +82,20 @@ function orangeLive(namespace) {
                     item: function () {
                         // Update Data Set
                         dataSet = result.data;
-                        // Dispatch [load] event
-                        _dispatchEvent(['load'], result.data);
+                        // Dispatch [load] event => might be called once per on object
+                        if (!isLoadDispatched) {
+                            _dispatchEvent(['load'], result.data);
+                            isLoadDispatched = true;
+                        }
                     },
                     query: function () {
-                        // Update Data Set
+                        // Update Data Set 
                         dataSet = result.data;
-                        // Dispatch [load] event
-                        _dispatchEvent(['load'], result.data);
+                        // Dispatch [load] event => might be called once per on object
+                        if (!isLoadDispatched) {
+                            _dispatchEvent(['load'], result.data);
+                            isLoadDispatched = true;
+                        }
                     }
                 };
 
@@ -93,13 +105,13 @@ function orangeLive(namespace) {
                 }
             });
 
-            // # Response Error
+            // ### Response Error
             socket.on('responseError', function (operation, err) {
                 console.error(operation, err);
             });
         }
 
-        // # Dispatch Event
+        // ## Dispatch Event
         function _dispatchEvent(type, data) {
             // On Factory
             var onFactory = {
@@ -135,19 +147,17 @@ function orangeLive(namespace) {
             };
 
             // Iterate over registered ~on tasks
-            _.each(onStack, function (on) {
+            _.each(onTasks, function (on) {
                 // If type matches some registered ~on
                 if (type.indexOf(on.type) >= 0) {
                     onFactory[on.type](on.callback);
                 }
             });
         }
-
-        function _firstLoad() {
-            // Request join
-            _request('join');
-
-            // Do First Load
+        
+        // ## Load
+        function _load() {
+            // Do Get
             _request('get', {
                 namespace: namespace,
                 where: query.where || {},
@@ -155,11 +165,9 @@ function orangeLive(namespace) {
                 index: index,
                 useIndex: query.useIndex
             });
-
-            firstOn = false;
         }
 
-        // # Between
+        // ## Between
         function between(valueLow, valueHigh) {
             query.where = {
                 key: ['~', valueLow, valueHigh]
@@ -168,7 +176,7 @@ function orangeLive(namespace) {
             return this;
         }
 
-        // # Equals
+        // ## Equals
         function equals(value) {
             query.where = {
                 key: ['=', value]
@@ -177,7 +185,7 @@ function orangeLive(namespace) {
             return this;
         }
 
-        // # Less Then
+        // ## Less Then
         function lessThen(value) {
             query.where = {
                 key: ['<=', value]
@@ -186,7 +194,7 @@ function orangeLive(namespace) {
             return this;
         }
 
-        // # Greatest Then
+        // ## Greatest Then
         function greatestThen(value) {
             query.where = {
                 key: ['>=', value]
@@ -195,14 +203,14 @@ function orangeLive(namespace) {
             return this;
         }
 
-        // # Limit
+        // ## Limit
         function limit(limit) {
             query.limit = limit;
 
             return this;
         }
 
-        // # Starts With
+        // ## Starts With
         function startsWith(value) {
             query.where = {
                 key: ['^', value]
@@ -211,7 +219,7 @@ function orangeLive(namespace) {
             return this;
         }
 
-        // # Use Index
+        // ## Use Index
         function useIndex(index) {
             query.useIndex = index;
 

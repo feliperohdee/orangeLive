@@ -84,13 +84,30 @@ function get(params) {
         _item(params);
     } else {
         // Query Operation
-        _.extend(params.where, {
-            namespace: ['=', params.namespace]
-        });
+        params.where = {};
 
-        if (params.index && params.useIndex) {
+        params.where.namespace = ['=', params.namespace];
+        
+        // Set default condition if exists, using key
+        if (params.condition) {
+            params.where.key = params.condition;
+        }
+        
+        // Indexes
+        if (params.index && params.indexes) {
+            // Remove default key condition
+            delete params.where.key;
+            
             // Discover and get Index
-            params.indexedBy = _discoverIndex(params.index, params.useIndex);
+            var index = _discoverIndex(params.indexes, params.index);
+            
+            // Set indexed by
+            params.indexedBy = index.name;
+            
+            // Set condition if exists
+            if (params.condition) {
+                params.where[index.attribute] = params.condition;
+            }
         }
 
         _query(params);
@@ -113,28 +130,28 @@ function set(params) {
         });
     }
 
-    if (params.index) {
+    if (params.indexes) {
         // Encode Index
-        params.set = _encodeIndexSet(params.index, params.set);
+        params.set = _encodeIndexSet(params.indexes, params.set);
     }
 
     _insert(params);
 }
 
 // # Encode Index Set
-function _encodeIndexSet(index, set) {
+function _encodeIndexSet(indexes, set) {
     var result = {};
 
     // String Index
-    if (index.string) {
-        _.each(index.string, function (indexAttr, key) {
+    if (indexes.string) {
+        _.each(indexes.string, function (indexAttr, key) {
             result['_si' + (key % 2)] = set[indexAttr]; // key % 2 guarantees 0 or 1
         });
     }
 
     // Number Index
-    if (index.number) {
-        _.each(index.number, function (indexAttr, key) {
+    if (indexes.number) {
+        _.each(indexes.number, function (indexAttr, key) {
             result['_ni' + (key % 2)] = set[indexAttr]; // key % 2 guarantees 0 or 1
         });
     }
@@ -143,19 +160,25 @@ function _encodeIndexSet(index, set) {
 }
 
 // # Discover Index
-function _discoverIndex(index, attr) {
+function _discoverIndex(indexes, index) {
     var result = false;
 
     // Discover Index
-    var string = index.string.indexOf(attr);
-    var number = index.number.indexOf(attr);
+    var string = indexes.string.indexOf(index);
+    var number = indexes.number.indexOf(index);
 
     if (string >= 0) {
-        result = 'stringIndex' + string; // stringIndex0 or stringIndex1
+        result = {
+            name: 'stringIndex' + string, // stringIndex0 or stringIndex1
+            attribute: '_si' + string // _si0 or _si0
+        };
     }
 
     if (number >= 0) {
-        result = 'numberIndex' + number; // numberIndex0 or numberIndex1
+        result = {
+            name: 'numberIndex' + number, // numberIndex0 or numberIndex1
+            attribute: '_ni' + number // _ni0 or _ni0
+        };
     }
 
     return result;

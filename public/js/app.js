@@ -1,7 +1,7 @@
 // # App
 
 //var instance = orangeLive('*/i4w2jjtp');
-var instance = orangeLive('*').setIndex({
+var instance = orangeLive('*').defineIndexes({
     string: ['name'],
     number: ['height', 'age']
 });
@@ -12,8 +12,10 @@ var query = instance.on({
 
         _.each(data, function (value) {
             console.log(value.key, value.name, value.height, value.age);
+            $('#data').find('table').append('<tr>' + value.key + ' - ' + value.name + ' - ' + value.height + ' - ' + value.age + '</tr>')
         });
 
+        updateView(data);
     },
     add: function (data) {
         console.log('on add');
@@ -23,28 +25,26 @@ var query = instance.on({
         console.log('on dataUpdate');
 
         _.each(data, function (value) {
-            console.log(value.key, value.name, value.height, value.age);
+            //console.log(value.key, value.name, value.height, value.age);
         });
+
+        updateView(data);
     }
-}).limit(5).useIndex('age');
+}).limit(5).useIndex('age').between(105, 130);
 
+function updateView(data) {
 
-setTimeout(function () {
-    instance.set({
-        name: 'Ana Rohde',
-        height: Math.floor(Math.random(10, 90) * 100),
-        age: Math.floor(Math.random(10, 90) * 100)
+    $('body').find('table tbody').html('');
+
+    _.each(data, function (value) {
+        $('body').find('table tbody').append('<tr><td>' + value.key + '</td><td>' + value.name + '</td><td>' + value.height + '</td><td>' + value.age + '</td></tr>');
     });
-}, 1000);
+}
 
-/*
- setTimeout(function () {
- socket.emit('query', {
- table: 'tblLiveOne',
- limit: 2,
- where: {
- namespace: ['=', '*']
- }
- });
- }, 1000);
- */
+$(window).on('click', function () {
+    instance.set({
+        name: 'Rohde Test',
+        height: Math.floor(Math.random(10, 90) * 100),
+        age: 108//Math.floor(Math.random(10, 90) * 100)
+    });
+});

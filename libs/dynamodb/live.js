@@ -2,6 +2,7 @@
 var _ = require('lodash');
 var dynamoGet = require('./get');
 var dynamoInsert = require('./insert');
+var dynamoUpdate = require('./update');
 var md5 = require('MD5');
 
 __construct();
@@ -12,7 +13,13 @@ function __construct() {
     io.on('connection', function (socket) {
         // # Request
         socket.on('request', function (operation, params) {
-            //
+            // Decode Address
+            var address = _decodeAddress(params.address);
+            
+            // Append these keys to params
+            params.namespace = address.namespace;
+            params.key = address.key;
+            
             var operationFactory = {
                 join: function () {
                     //Join client to namespace
@@ -38,6 +45,16 @@ function __construct() {
     });
 }
 
+// # Decode Address
+function _decodeAddress(address){
+    address = address.split('/');
+    
+    return {
+        namespace: address[0],
+        key: address[1] || false
+    };
+}
+
 // # Join Room
 function _joinRoom(socket, params) {
     // Join new namespace, if not connected yet
@@ -52,6 +69,26 @@ function _leaveRoom(socket, params) {
     if (params.namespace !== socket.id) {
         socket.leave(params.namespace);
     }
+}
+
+// # Insert
+function _insert(params) {
+    var insert = dynamoInsert.item('tblLive1');
+
+    if (params.alias)
+        insert.alias(params.alias);
+
+    if (params.set)
+        insert.set(params.set);
+
+    if (params.withCondition)
+        insert.withCondition(params.withCondition);
+
+    insert.exec().then(function (result) {
+        io.to(params.namespace).emit('responseSuccess', 'insert', result);
+    }).catch(function (err) {
+        io.to(params.namespace).emit('responseError', 'insert', err.message);
+    });
 }
 
 // # Item
@@ -73,37 +110,37 @@ function _item(params) {
 
 // # get
 function get(params) {
+    //
+    params.where = {};
+
     // Define operation
-    if (params.namespace.indexOf('/') >= 0) {
+    if (params.key) {
+
         // Item Operation
-        _.extend(params, {
-            namespace: params.namespace.split('/')[0],
-            key: params.namespace.split('/')[1]
-        });
+        params.where._namespace = params.namespace;
+        params.where._key = params.key;
 
         _item(params);
     } else {
         // Query Operation
-        params.where = {};
+        params.where._namespace = ['=', params.namespace];
 
-        params.where.namespace = ['=', params.namespace];
-        
         // Set default condition if exists, using key
         if (params.condition) {
-            params.where.key = params.condition;
+            params.where._key = params.condition;
         }
-        
+
         // Indexes
         if (params.index && params.indexes) {
             // Remove default key condition
-            delete params.where.key;
-            
+            delete params.where._key;
+
             // Discover and get Index
             var index = _discoverIndex(params.indexes, params.index);
-            
+
             // Set indexed by
             params.indexedBy = index.name;
-            
+
             // Set condition if exists
             if (params.condition) {
                 params.where[index.attribute] = params.condition;
@@ -116,26 +153,26 @@ function get(params) {
 
 // # Set
 function set(params) {
-    // Define namespace
-    if (params.namespace.indexOf('/') >= 0) {
-        // Custom Key
-        _.extend(params.set, {
-            namespace: params.namespace.split('/')[0],
-            key: params.namespace.split('/')[1]
-        });
-    } else {
-        // Default Key
-        _.extend(params.set, {
-            namespace: params.namespace
-        });
-    }
 
+    // Encode Indexes
     if (params.indexes) {
-        // Encode Index
         params.set = _encodeIndexSet(params.indexes, params.set);
     }
 
-    _insert(params);
+    // Define namespace
+    if (params.key) {
+        // ## Update Operation
+        params.where = {};
+        params.where._namespace = params.namespace;
+        params.where._key = params.key;
+        
+        _update(params);
+    } else {
+        // ## Insert Operation
+        params.set._namespace = params.namespace;
+        
+        _insert(params);
+    }
 }
 
 // # Encode Index Set
@@ -223,22 +260,19 @@ function _query(params) {
     });
 }
 
-// # Insert
-function _insert(params) {
-    var insert = dynamoInsert.item('tblLive1');
-
-    if (params.alias)
-        insert.alias(params.alias);
+// # Update
+function _update(params) {
+    var update = dynamoUpdate.item('tblLive1');
 
     if (params.set)
-        insert.set(params.set);
+        update.set(params.set);
 
-    if (params.withCondition)
-        insert.withCondition(params.withCondition);
+    if (params.where)
+        update.where(params.where);
 
-    insert.exec().then(function (result) {
-        io.to(params.namespace).emit('responseSuccess', 'insert', result);
+    update.exec().then(function (result) {
+        io.to(params.namespace).emit('responseSuccess', 'update', result);
     }).catch(function (err) {
-        io.to(params.namespace).emit('responseError', 'insert', err.message);
+        io.to(params.namespace).emit('responseError', 'update', err.message);
     });
 }

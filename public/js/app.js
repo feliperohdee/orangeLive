@@ -1,53 +1,63 @@
 // # App
 
-//var instance = orangeLive('*/i4w2jjtp');
 var instance = orangeLive('*').defineIndexes({
+    string: ['name'],
+    number: ['height', 'age']
+});
+
+var instance2 = orangeLive('*/-ci52ofjx30004vqnr990ap3g1').defineIndexes({
     string: ['name'],
     number: ['height', 'age']
 });
 
 var query = instance.on({
     load: function (data) {
-        console.log('on load');
-
-        _.each(data, function (value) {
-            console.log(value.key, value.name, value.height, value.age);
-            $('#data').find('table').append('<tr>' + value.key + ' - ' + value.name + ' - ' + value.height + ' - ' + value.age + '</tr>')
-        });
+        console.log('on load', data);
 
         updateView(data);
     },
     add: function (data) {
-        console.log('on add');
-        console.log(data.key, data.name, data.height, data.age);
+        console.log('on add', data);
     },
-    dataUpdate: function (data) {
-        console.log('on dataUpdate');
-
-        _.each(data, function (value) {
-            //console.log(value.key, value.name, value.height, value.age);
-        });
+    change: function (data) {
+        console.log('on change', data);
+    },
+    collectionUpdate: function (data) {
+        console.log('on collectionUpdate');
 
         updateView(data);
     }
-}).limit(50).useIndex('age').between(105, 130);
+}).limit(10).useIndex('age').between(105, 130);
 
 function updateView(data) {
 
     $('body').find('table tbody').html('');
+    $('body').find('#data').html('');
 
-    _.each(data, function (value) {
-        $('body').find('table tbody').append('<tr><td>' + value.key + '</td><td>' + value.name + '</td><td>' + value.height + '</td><td>' + value.age + '</td></tr>');
+    if (_.isArray(data)) {
+        _.each(data, function (value) {
+            $('body').find('table tbody').append('<tr><td>' + value._key + '</td><td>' + value.name + '</td><td>' + value.height + '</td><td>' + value.age + '</td></tr>');
+        });
+    }else{
+        $('body').find('#data').html(JSON.stringify(data));
+    }
+}
+
+function add() {
+    instance.set({
+        name: 'Rohde Test',
+        height: getRandomInt(10, 90),
+        age: getRandomInt(105, 115)
     });
 }
 
-$(window).on('click', function () {
-    instance.set({
+function update() {
+    instance2.set({
         name: 'Rohde Test',
-        height: getRandomInt(10,90),
-        age: getRandomInt(105,115)
+        height: getRandomInt(10, 90),
+        age: getRandomInt(105, 110)
     });
-});
+}
 
 function getRandomInt(min, max) {
     return Math.floor(Math.random() * (max - min)) + min;

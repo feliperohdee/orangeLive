@@ -1,7 +1,7 @@
 // # orangeLive
 var socket = io();
 
-function orangeLive(namespace) {
+function orangeLive(address) {
     //
     var indexes = false;
     var eventStack = {};
@@ -15,11 +15,12 @@ function orangeLive(namespace) {
     /*----------------------------*/
 
     // # Request
-    function _request(type, params) {
-        // Extend params with namespace
+    function _request(type, params, responseType) {
+        // Extend params with address
         params = _.extend(params || {}, {
-            namespace: namespace,
-            indexes: indexes
+            address: address,
+            indexes: indexes,
+            responseType: responseType || false
         });
 
         socket.emit('request', type, params);
@@ -47,16 +48,16 @@ function orangeLive(namespace) {
 
         // ## Construct
         function __construct() {
-            // Append eventStack with {load, add, change, remove, dataUpdate}, and callback
+            // Append eventStack with {load, add, change, remove, collectionUpdate}, and callback
             _.each(operation, function (callback, type) {
                 eventStack[type] = callback;
             });
 
-            // Request join to namespace
+            // Request join to address
             _request('join');
 
             // Delay 500ms to first load
-            _.debounce(_load, 500)();
+            _.debounce(_get, 500)();
 
             // Start listen sockets
             _bindSockets();
@@ -73,8 +74,8 @@ function orangeLive(namespace) {
                 var operationFactory = {
                     // Insert
                     insert: function () {
-                        // Dispatch [add, dataUpdate] event
-                        _dispatchEvents(['add', 'dataUpdate'], result.data, 'insert');
+                        // Dispatch [add, collectionUpdate] event
+                        _dispatchEvents(['add', 'collectionUpdate'], result.data, 'insert');
                     },
                     // Item
                     item: function () {
@@ -95,6 +96,11 @@ function orangeLive(namespace) {
                             _dispatchEvents(['load'], result.data);
                             isLoaded = true;
                         }
+                    },
+                    // Update
+                    update: function () {
+                        // Dispatch [change, collectionUpdate] event
+                        _dispatchEvents(['change', 'collectionUpdate'], result.data, 'update');
                     }
                 };
 
@@ -120,25 +126,33 @@ function orangeLive(namespace) {
                     // Add just return data
                     callback(data);
                 },
+                // Change Event
+                change: function (callback) {
+                    // Add just return data
+                    callback(data);
+                },
                 // Load Event
                 load: function (callback) {
                     // Load just return data
                     callback(data);
                 },
-                // Data Update Event
-                dataUpdate: function (callback) {
+                // Collection Update Event
+                collectionUpdate: function (callback) {
                     var fromEventFactory = {
                         // From insert event
                         insert: function () {
-                            if (_.isArray(dataSet)) {
-                                // If dataset is a collection, new data is gonna be pushed to collection
-                                _insertCollection(data, callback);
-                            }
+                            _insertCollection(data, callback);
+                        },
+                        // From update event
+                        update: function () {
+                            _updateCollection(data, callback);
                         }
                     };
 
                     // Call factory
-                    fromEventFactory[fromEvent]();
+                    if (_.isArray(dataSet)) {
+                        fromEventFactory[fromEvent]();
+                    }
                 }
             };
 
@@ -150,35 +164,9 @@ function orangeLive(namespace) {
                 }
             });
         }
-
-        //# # Insert in Collection
-        function _insertCollection(data, callback) {
-            if (query.condition) {
-                if (_testCondition(data)) {
-                    // If pass through condition test, push data, otherwise dataset keeps untouchable
-                    dataSet.push(data);
-                }
-            } else {
-                // If no query condition, always push data to dataSet, without tests
-                dataSet.push(data);
-            }
-
-            // Sort
-            if (query.index) {
-                dataSet = _.sortBy(dataSet, query.index || 'key');
-            }
-
-            // Limit
-            if (query.limit) {
-                dataSet = dataSet.slice(0, query.limit);
-            }
-
-            // Dataset is array, callback all there
-            callback(dataSet);
-        }
-
-        // ## Load
-        function _load() {
+        
+        // ## Get
+        function _get() {
             // Do Get
             _request('get', {
                 condition: query.condition || false,
@@ -187,8 +175,43 @@ function orangeLive(namespace) {
             });
         }
 
+        //# # Insert in Collection
+        function _insertCollection(data, callback) {
+            if (_testCondition(data)) {
+                // If pass through condition test, push data, otherwise dataset keeps untouchable
+                dataSet.push(data);
+            }
+
+            // Sort and Limit
+            dataSet = _organizeCollection(dataSet);
+
+            // Dataset is array, callback all there
+            callback(dataSet);
+        }
+
+        // ## Organize Collection => Sort and Limit
+        function _organizeCollection(data) {
+            // Sort
+            if (query.index) {
+                data = _.sortBy(data, query.index || '_key');
+            }
+
+            // Limit
+            if (query.limit) {
+                data = data.slice(0, query.limit);
+            }
+
+            return data;
+        }
+
         // ## Test Condition
         function _testCondition(data) {
+
+            // If no condition, always pass
+            if (!query.condition) {
+                return true;
+            }
+
             // Define conditions
             var conditionCase = query.condition[0];
             var conditionValue = query.condition[1];
@@ -200,7 +223,7 @@ function orangeLive(namespace) {
             var conditionsTestsFactory = {
                 // Between test
                 '~': function () {
-                    if (data[query.index || 'key'] >= conditionValue[0] && data[query.index || 'key'] <= conditionValue[1]) {
+                    if (data[query.index || '_key'] >= conditionValue[0] && data[query.index || '_key'] <= conditionValue[1]) {
                         return true;
                     }
 
@@ -208,7 +231,7 @@ function orangeLive(namespace) {
                 },
                 // Equals test
                 '=': function () {
-                    if (data[query.index || 'key'] === conditionValue) {
+                    if (data[query.index || '_key'] === conditionValue) {
                         return true;
                     }
 
@@ -216,7 +239,7 @@ function orangeLive(namespace) {
                 },
                 // Less then test
                 '<=': function () {
-                    if (data[query.index || 'key'] <= conditionValue) {
+                    if (data[query.index || '_key'] <= conditionValue) {
                         return true;
                     }
 
@@ -224,7 +247,7 @@ function orangeLive(namespace) {
                 },
                 // Greatest then test
                 '>=': function () {
-                    if (data[query.index || 'key'] >= conditionValue) {
+                    if (data[query.index || '_key'] >= conditionValue) {
                         return true;
                     }
 
@@ -232,7 +255,7 @@ function orangeLive(namespace) {
                 },
                 // Starts with test
                 '^': function () {
-                    if (data[query.index || 'key'].toLowerCase().indexOf(conditionValue.toLowerCase()) >= 0) {
+                    if (data[query.index || '_key'].toLowerCase().indexOf(conditionValue.toLowerCase()) >= 0) {
                         return true;
                     }
 
@@ -242,6 +265,34 @@ function orangeLive(namespace) {
 
             // Test condition
             return conditionsTestsFactory[conditionCase]();
+        }
+
+        //# # Update in Collection
+        function _updateCollection(data, callback) {
+
+            var dataSetIndex = _.findIndex(dataSet, {_key: data._key});
+
+            if (_testCondition(data)) {
+                // If pass through condition test, update data if exists
+                if (dataSetIndex >= 0) {
+                    // Update Item
+                    dataSet[dataSetIndex] = data;
+                } else {
+                    // Passed in the test but no belongs to collection yet, so insert it
+                    dataSet.push(data);
+                }
+            } else {
+                // If reproved in the test, remove data if exists
+                if (dataSetIndex >= 0) {
+                    dataSet.splice(dataSetIndex, 1);
+                }
+            }
+
+            // Sort and Limit
+            dataSet = _organizeCollection(dataSet);
+
+            // Dataset is array, callback all there
+            callback(dataSet);
         }
 
         // ## Between

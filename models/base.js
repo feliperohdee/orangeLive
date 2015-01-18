@@ -13,9 +13,9 @@ module.exports = dynamodb;
 function _createSchema() {
     // # Set schema for tblLiveOne
     dynamodb.schema.set('tblLive1')
-            .withHash('namespace as STRING')
-            .withRange('key as STRING')
-            .withDefault({createdAt: 'TIMESTAMP'});
+            .withHash('_namespace as STRING')
+            .withRange('_key as STRING')
+            .withDefault({_createdAt: 'TIMESTAMP'});
 }
 
 // # Create Tables
@@ -26,8 +26,8 @@ function _createTables() {
 
     // # tblLiveOne
     tables.push(dynamodb.table.create('tblLive1')
-            .withHash('namespace as STRING')
-            .withRange('key as STRING')
+            .withHash('_namespace as STRING')
+            .withRange('_key as STRING')
             .withLocalIndex({
                 name: 'orderIndex',
                 attribute: '_orderIndex as NUMBER',

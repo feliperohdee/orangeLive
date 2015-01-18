@@ -30,7 +30,7 @@ var query = instance.on({
 
         updateView(data);
     }
-}).limit(5).useIndex('age').between(105, 130);
+}).limit(50).useIndex('age').between(105, 130);
 
 function updateView(data) {
 
@@ -44,7 +44,11 @@ function updateView(data) {
 $(window).on('click', function () {
     instance.set({
         name: 'Rohde Test',
-        height: Math.floor(Math.random(10, 90) * 100),
-        age: 108//Math.floor(Math.random(10, 90) * 100)
+        height: getRandomInt(10,90),
+        age: getRandomInt(105,115)
     });
 });
+
+function getRandomInt(min, max) {
+    return Math.floor(Math.random() * (max - min)) + min;
+}

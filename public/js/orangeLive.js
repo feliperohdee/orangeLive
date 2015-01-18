@@ -4,7 +4,7 @@ var socket = io();
 function orangeLive(namespace) {
     //
     var indexes = false;
-    var onBindings = [];
+    var eventStack = {};
 
     return{
         on: on,
@@ -47,12 +47,9 @@ function orangeLive(namespace) {
 
         // ## Construct
         function __construct() {
-            // Append onBindings with {load, add, change, remove, dataUpdate}, and callback
+            // Append eventStack with {load, add, change, remove, dataUpdate}, and callback
             _.each(operation, function (callback, type) {
-                onBindings.push({
-                    type: type,
-                    callback: callback
-                });
+                eventStack[type] = callback;
             });
 
             // Request join to namespace
@@ -77,7 +74,7 @@ function orangeLive(namespace) {
                     // Insert
                     insert: function () {
                         // Dispatch [add, dataUpdate] event
-                        _dispatchEvent(['add', 'dataUpdate'], result.data);
+                        _dispatchEvents(['add', 'dataUpdate'], result.data, 'insert');
                     },
                     // Item
                     item: function () {
@@ -85,7 +82,7 @@ function orangeLive(namespace) {
                         dataSet = result.data;
                         // Dispatch [load] event => might be called once per on object
                         if (!isLoaded) {
-                            _dispatchEvent(['load'], result.data);
+                            _dispatchEvents(['load'], result.data);
                             isLoaded = true;
                         }
                     },
@@ -95,7 +92,7 @@ function orangeLive(namespace) {
                         dataSet = result.data;
                         // Dispatch [load] event => might be called once per on object
                         if (!isLoaded) {
-                            _dispatchEvent(['load'], result.data);
+                            _dispatchEvents(['load'], result.data);
                             isLoaded = true;
                         }
                     }
@@ -103,6 +100,7 @@ function orangeLive(namespace) {
 
                 // Feed dataSet according to operation done
                 if (result.data) {
+                    // Call factory
                     operationFactory[operation]();
                 }
             });
@@ -113,10 +111,10 @@ function orangeLive(namespace) {
             });
         }
 
-        // ## Dispatch Event
-        function _dispatchEvent(type, data) {
-            // On Factory
-            var onFactory = {
+        // ## Dispatch Events
+        function _dispatchEvents(events, data, fromEvent) {
+            // Event Factory
+            var eventFactory = {
                 // Add Event
                 add: function (callback) {
                     // Add just return data
@@ -129,101 +127,54 @@ function orangeLive(namespace) {
                 },
                 // Data Update Event
                 dataUpdate: function (callback) {
-                    // new instance, data is gonna be manipulated
-                    var _data = _.extend({}, data);
-
-                    // Data needs to be processed with existent data
-                    if (_.isArray(dataSet)) {
-                        if (query.condition) {
-
-                            // Define conditions
-                            var conditionCase = query.condition[0];
-                            var conditionValue = query.condition[1];
-
-                            if (query.condition[2]) {
-                                conditionValue = [query.condition[1], query.condition[2]];
+                    var fromEventFactory = {
+                        // From insert event
+                        insert: function () {
+                            if (_.isArray(dataSet)) {
+                                // If dataset is a collection, new data is gonna be pushed to collection
+                                _insertCollection(data, callback);
                             }
-
-                            // Need to pass through conditions
-                            var conditionsTests = {
-                                // Between test
-                                '~': function () {
-                                    if (_data[query.index || 'key'] >= conditionValue[0] && _data[query.index || 'key'] <= conditionValue[1]) {
-                                        return true;
-                                    }
-
-                                    return false;
-                                },
-                                // Equals test
-                                '=': function () {
-                                    if (_data[query.index || 'key'] === conditionValue) {
-                                        return true;
-                                    }
-
-                                    return false;
-                                },
-                                // Less then test
-                                '<=': function () {
-                                    if (_data[query.index || 'key'] <= conditionValue) {
-                                        return true;
-                                    }
-
-                                    return false;
-                                },
-                                // Greatest then test
-                                '>=': function () {
-                                    if (_data[query.index || 'key'] >= conditionValue) {
-                                        return true;
-                                    }
-
-                                    return false;
-                                },
-                                // Starts with test
-                                '^': function () {
-                                    if (_data[query.index || 'key'].toLowerCase().indexOf(conditionValue.toLowerCase()) >= 0) {
-                                        return true;
-                                    }
-
-                                    return false;
-                                }
-                            };
-
-                            // Test condition
-                            if (conditionsTests[conditionCase]()) {
-                                // If pass through condition test, push data, otherwise dataset keeps untouchable
-                                dataSet.push(data);
-                            }
-                        } else {
-                            // If no query condition, always push data to dataSet
-                            dataSet.push(data);
                         }
+                    };
 
-                        // Sort
-                        if (query.index) {
-                            dataSet = _.sortBy(dataSet, query.index || 'key');
-                        }
-
-                        // Limit
-                        if (query.limit) {
-                            dataSet = dataSet.slice(0, query.limit);
-                        }
-                        
-                        // Dataset is array, callback all there
-                        callback(dataSet);
-                    }else{
-                        // Dataset not an array, callback just data
-                        callback(_data);
-                    }
+                    // Call factory
+                    fromEventFactory[fromEvent]();
                 }
             };
 
-            // Iterate over registered ~on binding tasks
-            _.each(onBindings, function (on) {
-                // If type matches some registered ~on
-                if (type.indexOf(on.type) >= 0) {
-                    onFactory[on.type](on.callback);
+            // Iterate over events, and test with previous registered ~on
+            _.each(events, function (event) {
+                if (eventStack[event]) {
+                    // Call factory
+                    eventFactory[event](eventStack[event]);
                 }
             });
+        }
+
+        //# # Insert in Collection
+        function _insertCollection(data, callback) {
+            if (query.condition) {
+                if (_testCondition(data)) {
+                    // If pass through condition test, push data, otherwise dataset keeps untouchable
+                    dataSet.push(data);
+                }
+            } else {
+                // If no query condition, always push data to dataSet, without tests
+                dataSet.push(data);
+            }
+
+            // Sort
+            if (query.index) {
+                dataSet = _.sortBy(dataSet, query.index || 'key');
+            }
+
+            // Limit
+            if (query.limit) {
+                dataSet = dataSet.slice(0, query.limit);
+            }
+
+            // Dataset is array, callback all there
+            callback(dataSet);
         }
 
         // ## Load
@@ -234,6 +185,63 @@ function orangeLive(namespace) {
                 limit: query.limit || false,
                 index: query.index || false
             });
+        }
+
+        // ## Test Condition
+        function _testCondition(data) {
+            // Define conditions
+            var conditionCase = query.condition[0];
+            var conditionValue = query.condition[1];
+
+            if (query.condition[2]) {
+                conditionValue = [query.condition[1], query.condition[2]];
+            }
+
+            var conditionsTestsFactory = {
+                // Between test
+                '~': function () {
+                    if (data[query.index || 'key'] >= conditionValue[0] && data[query.index || 'key'] <= conditionValue[1]) {
+                        return true;
+                    }
+
+                    return false;
+                },
+                // Equals test
+                '=': function () {
+                    if (data[query.index || 'key'] === conditionValue) {
+                        return true;
+                    }
+
+                    return false;
+                },
+                // Less then test
+                '<=': function () {
+                    if (data[query.index || 'key'] <= conditionValue) {
+                        return true;
+                    }
+
+                    return false;
+                },
+                // Greatest then test
+                '>=': function () {
+                    if (data[query.index || 'key'] >= conditionValue) {
+                        return true;
+                    }
+
+                    return false;
+                },
+                // Starts with test
+                '^': function () {
+                    if (data[query.index || 'key'].toLowerCase().indexOf(conditionValue.toLowerCase()) >= 0) {
+                        return true;
+                    }
+
+                    return false;
+                }
+            };
+
+            // Test condition
+            return conditionsTestsFactory[conditionCase]();
         }
 
         // ## Between

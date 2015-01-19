@@ -28,8 +28,8 @@ function _createTables() {
             .withHash('_namespace as STRING')
             .withRange('_key as STRING')
             .withLocalIndex({
-                name: 'orderIndex',
-                attribute: '_orderIndex as NUMBER',
+                name: 'priorityIndex',
+                attribute: '_pi as NUMBER',
                 projection: 'ALL'
             })
             .withLocalIndex({

@@ -19,6 +19,7 @@ function __construct() {
             // Append these keys to params
             params.namespace = address.namespace;
             params.key = address.key;
+            params.attribute = address.attribute;
 
             var instance = orangeLive(params, socket);
 
@@ -35,7 +36,8 @@ function _decodeAddress(address) {
 
     return {
         namespace: address[0],
-        key: address[1] || false
+        key: address[1] || false,
+        attribute: address[2] || false
     };
 }
 
@@ -54,17 +56,36 @@ function orangeLive(params, socket) {
 
     // # Load Operation
     function load() {
-        //
-        _syncFetch().then(function (result) {
-            // Normalize data
-            if (_.isArray(result.data)) {
-                // Collection
-                result.data = _.map(result.data, function (data) {
-                    return _normalizeReponseData(data);
-                });
-            } else {
-                // Item
-                result.data = _normalizeReponseData(result.data);
+        // Define query or item operation
+        var operation = {};
+
+        if (params.key) {
+            operation = {
+                type: 'item',
+                callback: _item
+            };
+        } else {
+            operation = {
+                type: 'query',
+                callback: _query
+            };
+        }
+
+        // Execute Operation Callback
+        operation.callback().then(function (result) {
+            //
+            // Normalize data if collection or item
+            switch (operation.type) {
+                case 'query':
+                    // Collection fetched
+                    result.data = _.map(result.data, function (data) {
+                        return _normalizeReponseData(data);
+                    });
+                    break;
+                case 'item':
+                    // Item fetched
+                    result.data = _normalizeReponseData(result.data);
+                    break;
             }
 
             _response().me().event('load').data(result);
@@ -83,9 +104,10 @@ function orangeLive(params, socket) {
         }
 
         var insertAttrs = {
-            set: _.extend({}, params.data, {
+            set: _.extend(params.data, {
                 _namespace: params.namespace,
-                _key: params.data.key || '-' + cuid()
+                _key: params.data.key || '-' + cuid(), // Generate new key if no one provided
+                _pi: params.priority || 0 // Priority Index
             })
         };
 
@@ -131,7 +153,9 @@ function orangeLive(params, socket) {
 
         // ## Update Operation
         var updateAttrs = {
-            set: params.data,
+            set: _.extend(params.data, {
+                _pi: params.priority || 0 // Priority Index
+            }),
             where: {
                 _namespace: params.namespace,
                 _key: params.key
@@ -139,7 +163,7 @@ function orangeLive(params, socket) {
         };
 
         // Immediate response
-        _response().all().event('update').data(_normalizeReponseData(_.extend({}, updateAttrs.set, updateAttrs.where)));
+        _response().all().event('update').data(_normalizeReponseData(_.extend(updateAttrs.set, updateAttrs.where)));
 
         // Do update sync and response status
         return _syncUpdate(updateAttrs).then(function () {
@@ -199,16 +223,20 @@ function orangeLive(params, socket) {
     // - Replace _key for key
     // - Remove useless data for user
     function _normalizeReponseData(data) {
-        var _data = _.extend({
-            key: data._key
-        }, data);
+
+        var _data = _.extend({}, data); // New reference is required do never influence in another operation
+
+        if (_data.key) {
+            data.key = data._key;
+        }
 
         delete _data._key;
         delete _data._namespace;
-        delete _data._si0;
-        delete _data._si1;
-        delete _data._ni0;
-        delete _data._ni1;
+        delete _data._pi; // Priority index
+        delete _data._si0; // String index 0
+        delete _data._si1; // String index 1
+        delete _data._ni0; // Number index 0
+        delete _data._ni1; // Number index 1
 
         return _data;
     }
@@ -220,9 +248,7 @@ function orangeLive(params, socket) {
         var attrs = {};
 
         // Delay execution 150 ms
-        setTimeout(function () {
-            _exec();
-        }, 150);
+        setTimeout(_exec, 150);
 
         return{
             all: all,
@@ -233,7 +259,7 @@ function orangeLive(params, socket) {
         };
 
         /*=============================*/
-        
+
         // # Exec
         function _exec() {
             if (attrs.err) {
@@ -242,11 +268,11 @@ function orangeLive(params, socket) {
                 io.to(attrs.to).emit('responseSuccess', attrs.event, attrs.data);
             }
         }
-        
+
         // # All
-        function all(){
+        function all() {
             attrs.to = params.namespace;
-            
+
             return this;
         }
 
@@ -279,9 +305,123 @@ function orangeLive(params, socket) {
         }
     }
 
+    // # Build Alias
+    function _buildAlias(names, values) {
+        //
+        var result = {};
+
+        if (names) {
+            //
+            result.names = {};
+            _.each(names, function (value) {
+                // Trim before handle
+                value = value.trim();
+
+                result.names[value] = value;
+            });
+        }
+
+        if (values) {
+            //
+            result.values = {};
+            _.each(values, function (value) {
+                // Trim before handle
+                value = value.trim();
+
+                result.values[value] = value;
+            });
+        }
+
+        return result;
+    }
+
+    // # Item
+    function _item() {
+        // Item Operation
+        var itemAttrs = {
+            where: {
+                _namespace: params.namespace,
+                _key: params.key
+            }
+        };
+
+        // If there is attribute, select
+        if (params.attribute) {
+            // Create an alias before
+            itemAttrs.alias = _buildAlias([params.attribute]);
+            itemAttrs.select = '#' + params.attribute;
+        }
+
+        // Select
+        if (params.select) {
+            // Split comma's
+            var selectArray = params.select.split(',');
+
+            // Create Alias
+            itemAttrs.alias = _buildAlias(selectArray);
+
+            itemAttrs.select = _.map(selectArray, function (value) {
+                return '#' + value.trim();
+            }).join();
+        }
+
+        return _syncItem(itemAttrs);
+    }
+
+    // # Query
+    function _query() {
+        // Query Operation
+        var queryAttrs = {
+            consistent: params.consistent,
+            limit: params.limit,
+            startAt: params.startAt,
+            where: {
+                _namespace: ['=', params.namespace]
+            }
+        };
+
+        // Set default condition if exists, using key
+        if (params.condition) {
+            queryAttrs.where._key = params.condition;
+        }
+
+        // Select
+        if (params.select) {
+            // Split comma's
+            var selectArray = params.select.split(',');
+
+            // Create Alias
+            queryAttrs.alias = _buildAlias(selectArray);
+
+            queryAttrs.select = _.map(selectArray, function (value) {
+                return '#' + value.trim();
+            }).join();
+        }
+
+        // Indexes
+        if (params.index && params.indexes) {
+            // Discover and get Index
+            var index = _discoverIndex(params.indexes, params.index);
+
+            // Set indexed by
+            queryAttrs.indexedBy = index.name;
+
+            // Set condition if exists
+            if (params.condition) {
+                // Remove default key condition
+                delete queryAttrs.where._key;
+                // Append indexed condition
+                queryAttrs.where[index.attribute] = params.condition;
+            }
+        }
+
+        return _syncQuery(queryAttrs);
+    }
+
     // # Insert
     // - Execute dynamo insert
     function _syncInsert(attrs) {
+
         var insert = dynamoInsert.item('tblLive1');
 
         if (attrs.set)
@@ -290,61 +430,13 @@ function orangeLive(params, socket) {
         return insert.exec();
     }
 
-    // # Sync Fetch
-    // - Fetch data via syncItem or syncQuery operation
-    function _syncFetch() {
-        // Define operation
-        if (params.key) {
-            // Item Operation
-            var itemAttrs = {
-                where: {
-                    _namespace: params.namespace,
-                    _key: params.key
-                }
-            };
-
-            return _syncItem(itemAttrs);
-        } else {
-            // Query Operation
-            var queryAttrs = {
-                consistent: params.consistent,
-                limit: params.limit,
-                startAt: params.startAt,
-                where: {
-                    _namespace: ['=', params.namespace]
-                }
-            };
-
-            // Set default condition if exists, using key
-            if (params.condition) {
-                queryAttrs.where._key = params.condition;
-            }
-
-            // Indexes
-            if (params.index && params.indexes) {
-                // Discover and get Index
-                var index = _discoverIndex(params.indexes, params.index);
-
-                // Set indexed by
-                queryAttrs.indexedBy = index.name;
-
-                // Set condition if exists
-                if (params.condition) {
-                    // Remove default key condition
-                    delete queryAttrs.where._key;
-                    // Append indexed condition
-                    queryAttrs.where[index.attribute] = params.condition;
-                }
-            }
-
-            return _syncQuery(queryAttrs);
-        }
-    }
-
     // # Sync Item
     // - Execute dynamo item
     function _syncItem(attrs) {
         var item = dynamoGet.item('tblLive1');
+
+        if (attrs.alias)
+            item.alias(attrs.alias);
 
         if (attrs.select)
             item.select(attrs.select);
@@ -360,6 +452,9 @@ function orangeLive(params, socket) {
     function _syncQuery(attrs) {
         //
         var query = dynamoGet.queryItems('tblLive1');
+
+        if (attrs.alias)
+            query.alias(attrs.alias);
 
         if (attrs.consistent)
             query.consistent();

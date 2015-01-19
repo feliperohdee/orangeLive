@@ -1,18 +1,18 @@
 // # App
 
-var instance = orangeLive('*').defineIndexes({
+var instance = orangeLive('*/-ci547sg9v000262nrtxt2o4p8/name').defineIndexes({
     string: ['name'],
     number: ['height', 'age']
 });
 
-var instance2 = orangeLive('*/-ci53yjht50000lznr7gppdyhzz').defineIndexes({
+var instance2 = orangeLive('*/-ci547sg9v000262nrtxt2o4p8').defineIndexes({
     string: ['name'],
     number: ['height', 'age']
 });
 
 var paginationFunctions = {};
 
-var query = instance.on({
+instance.on({
     load: function (data, pagination) {
         console.log('on load', data, pagination);
 
@@ -43,7 +43,7 @@ var query = instance.on({
 
         updateView(data);
     }
-}).limit(4).useIndex('age').between(105, 130);
+}).limit(4).useIndex('height');//.between(105, 130);
 
 function updateView(data) {
     $('body').find('table tbody').html('');
@@ -71,7 +71,7 @@ function update() {
         name: 'Rohde Test',
         height: getRandomInt(0, 90),
         age: getRandomInt(105, 110)
-    });
+    }, 1);
 }
 
 function getRandomInt(min, max) {

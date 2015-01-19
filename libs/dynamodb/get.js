@@ -35,6 +35,7 @@ function item(table) {
     _setTable(table);
 
     return {
+        alias: alias,
         consistent: consistent,
         exec: exec,
         select: select,
@@ -46,6 +47,21 @@ function item(table) {
     // # TableName
     function _setTable(table) {
         params.TableName = table;
+    }
+    
+    // # Attributes Alias
+    function alias(alias) {
+        // ## ExpressionAttributeNames
+        if (alias.names) {
+            params.ExpressionAttributeNames = helpers.alias.encodeAttributes.names(alias.names);
+        }
+
+        // ## ExpressionAttributeValues
+        if (alias.values) {
+            params.ExpressionAttributeValues = helpers.alias.encodeAttributes.values(alias.values);
+        }
+
+        return this;
     }
 
     // # ConsistentRead

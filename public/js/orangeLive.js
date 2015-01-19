@@ -3,8 +3,9 @@ var socket = io();
 
 function orangeLive(address) {
     //
-    var indexes = false;
+    var dataSet = [];
     var eventStack = {};
+    var indexes = false;
 
     return{
         on: on,
@@ -28,8 +29,7 @@ function orangeLive(address) {
 
     // # On
     function on(events) {
-
-        var dataSet = [];
+        //
         var query = {};
         var pagination = {
             current: 0,
@@ -46,6 +46,7 @@ function orangeLive(address) {
             lessThen: lessThen,
             greatestThen: greatestThen,
             limit: limit,
+            select:select,
             startAt: startAt,
             startsWith: startsWith,
             useIndex: useIndex
@@ -60,7 +61,7 @@ function orangeLive(address) {
                 eventStack[event] = callback;
             });
 
-            // Request join to address
+            // Request join
             _request('join');
 
             // Request load data
@@ -317,6 +318,7 @@ function orangeLive(address) {
                 consistent: consistent || false,
                 index: query.index || false,
                 limit: query.limit || false,
+                select: query.select || false,
                 startAt: query.startAt || false
             });
         }
@@ -355,7 +357,15 @@ function orangeLive(address) {
 
             return this;
         }
+        
+        // ## Select
+        function select(select) {
+            query.select = select;
 
+            return this;
+        }
+        
+        // ## Start At
         function startAt(key) {
             query.startAt = key;
 
@@ -378,8 +388,23 @@ function orangeLive(address) {
     }
 
     // # Insert
-    function insert(data) {
+    function insert(data, priority) {
         //
+        _request('insert', {
+            data: data,
+            priority: priority
+        });
+
+        return this;
+    }
+
+    // # Push
+    function push(data) {
+        //
+        if(_.isArray(dataSet)){
+            
+        }
+        
         _request('insert', {
             data: data
         });
@@ -388,10 +413,11 @@ function orangeLive(address) {
     }
 
     // # Update
-    function update(data) {
+    function update(data, priority) {
         //
         _request('update', {
-            data: data
+            data: data,
+            priority: priority
         });
 
         return this;

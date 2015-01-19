@@ -8,19 +8,19 @@ function orangeLive(address) {
 
     return{
         on: on,
-        set: set,
-        defineIndexes: defineIndexes
+        insert: insert,
+        defineIndexes: defineIndexes,
+        update: update
     };
 
     /*----------------------------*/
 
     // # Request
-    function _request(operation, params, responseType) {
+    function _request(operation, params) {
         // Extend params with address
         params = _.extend(params || {}, {
             address: address,
-            indexes: indexes,
-            responseType: responseType || false
+            indexes: indexes
         });
 
         socket.emit('request', operation, params);
@@ -29,8 +29,14 @@ function orangeLive(address) {
     // # On
     function on(events) {
 
-        var query = {};
         var dataSet = [];
+        var query = {};
+        var pagination = {
+            current: 0,
+            startKeys: [],
+            isPrev: false,
+            isNext: false
+        };
 
         __construct();
 
@@ -40,6 +46,7 @@ function orangeLive(address) {
             lessThen: lessThen,
             greatestThen: greatestThen,
             limit: limit,
+            startAt: startAt,
             startsWith: startsWith,
             useIndex: useIndex
         };
@@ -65,16 +72,6 @@ function orangeLive(address) {
             _bindSockets();
         }
 
-        // ## Load
-        function _load(consistent) {
-            _request('load', {
-                condition: query.condition || false,
-                consistent: consistent || false,
-                limit: query.limit || false,
-                index: query.index || false
-            });
-        }
-
         // ## Bind Sockets
         function _bindSockets() {
 
@@ -86,80 +83,171 @@ function orangeLive(address) {
                         // Update Data Set 
                         dataSet = result.data;
 
-                        _dispatchEvents([event], result);
+                        // If dataset is collection, setup pagination
+                        if (_.isArray(dataSet)) {
+                            // Set startkeys for the next pagination page
+                            if (result.startKey) {
+                                pagination.startKeys[0] = null; // => required
+                                pagination.startKeys[pagination.current + 1] = result.startKey;
+                            }
+
+                            // Enable / Disable Prev and Next
+                            pagination.isPrev = (pagination.current <= 0) ? false : true;
+                            pagination.isNext = (pagination.current >= pagination.startKeys.length - 1) ? false : true;
+                        }
+
+                        // Dispatch load event
+                        _dispatchEvent('load', {
+                            data: result.data,
+                            pagination: pagination
+                        });
+                        break;
+                    case 'insert':
+                    case 'update':
+                        _dispatchEvent(event, result);
+                        _dispatchEvent('collectionUpdate:' + event, result);
                         break;
                     default:
-                        //
-                        _dispatchEvents([event, 'collectionUpdate'], result);
+                        console.log(event, result);
                 }
             });
 
             // ### Response Error
-            socket.on('responseError', function (err) {
-                console.error(err);
+            socket.on('responseError', function (event, err) {
+                console.error(event, err);
             });
         }
 
-        // ## Dispatch Events
-        function _dispatchEvents(events, result) {
-            // Iterate over events, and test with previous registered ~on
-            _.each(events, function (event) {
-                //
-                var callback = eventStack[event];
+        // ## Dispatch Event
+        function _dispatchEvent(event, result) {
+            // Split to remove second rule if exists
+            var callback = eventStack[event.split(':')[0]];
 
-                if (callback) {
-                    // Call factory
-                    switch (event) {
-                        case 'add':
-                        case 'change':
-                        case 'load':
-                            // Just Return Data
-                            callback(result.data);
-                            break;
-                        case 'collectionUpdate':
-                            _onCollectionUpdate(result, callback);
-                            break;
-                    }
+            if (callback) {
+                // Call factory
+                switch (event) {
+                    case 'collectionUpdate:insert':
+                        _collectionInsert(result, callback);
+                        break;
+                    case 'collectionUpdate:update':
+                        _collectionUpdate(result, callback);
+                        break;
+                    case 'load':
+                        // Return Data and Pagination functions
+                        callback(result.data, {
+                            prev: result.pagination.isPrev ? _paginationPrev : false,
+                            next: result.pagination.isNext ? _paginationNext : false
+                        });
+                        break;
+                    case 'insert':
+                    case 'update':
+                        // Just Return Data
+                        callback(result);
+                        break;
                 }
-            });
+            }
 
             // ### Insert in Collection
-            function _insertCollection(data, callback) {
-                if (_testCondition(data)) {
-                    // If pass through condition test, push data, otherwise dataset keeps untouchable
-                    dataSet.push(data);
+            function _collectionInsert(data, callback) {
+                //
+                if (_.isArray(dataSet)) {
+                    // If collection, handle data
+                    if (_testConditions(data)) {
+                        // If pass through condition test, push data, otherwise dataset keeps untouchable
+                        dataSet.push(data);
+                    }
+
+                    // Sort and Limit
+                    dataSet = _sortAndLimit(dataSet);
                 }
 
+                // Callback dataSet, if item, keeps untouched
+                callback(dataSet);
+            }
+
+            //### Update in Collection
+            function _collectionUpdate(data, callback) {
+                //
+                if (_.isArray(dataSet)) {
+                    // If collection, handle data
+                    var dataSetIndex = _.findIndex(dataSet, {key: data.key});
+
+                    if (_testConditions(data)) {
+                        // Passed into tests, update data if exists
+                        if (dataSetIndex >= 0) {
+                            // Update Item
+                            dataSet[dataSetIndex] = data;
+                        } else {
+                            // Passed into tests but not belongs to collection yet, insert it
+                            dataSet.push(data);
+                        }
+                    } else {
+                        // If reproved in the test, remove data if exists
+                        if (dataSetIndex >= 0) {
+                            dataSet.splice(dataSetIndex, 1);
+                        }
+                    }
+
+                    // Sort and Limit
+                    dataSet = _sortAndLimit(dataSet);
+                } else {
+                    // Dataset is item, return just updated data
+                    dataSet = data;
+                }
+
+                // Callback dataSet
+                callback(dataSet);
+            }
+
+            // # Next Page
+            function _paginationNext() {
+                //
+                if (pagination.isNext) {
+                    var startKeysLength = pagination.startKeys.length - 1;
+
+                    if (++pagination.current >= startKeysLength) {
+                        pagination.current = startKeysLength;
+                    }
+
+                    // Define Start At Key
+                    startAt(pagination.startKeys[pagination.current]);
+
+                    _load();
+                }
+            }
+
+            // # Prev Page
+            function _paginationPrev() {
+                //
+                if (pagination.isPrev) {
+                    if (--pagination.current <= 0) {
+                        pagination.current = 0;
+                    }
+
+                    // Define Start At Key
+                    startAt(pagination.startKeys[pagination.current]);
+
+                    _load();
+                }
+            }
+
+            // ### Sort and Limit
+            function _sortAndLimit(data) {
                 // Sort
                 if (query.index) {
-                    dataSet = _.sortBy(dataSet, query.index || '_key');
+                    data = _.sortBy(data, query.index || 'key');
                 }
 
                 // Limit
                 if (query.limit) {
-                    dataSet = dataSet.slice(0, query.limit);
+                    data = data.slice(0, query.limit);
                 }
 
-                // Dataset is array, callback all there
-                callback(dataSet);
+                return data;
             }
 
-            // ### On Collection Update
-            function _onCollectionUpdate(result, callback) {
-                // Get operation which triggered Collection Update event
-                switch (result.operation) {
-                    case 'insert':
-                        _insertCollection(result.data, callback);
-                        break;
-                    case 'update':
-                        // Call consistent load again when update
-                        _load(true);
-                        break;
-                }
-            }
-
-            // ### Test Condition
-            function _testCondition(data) {
+            // ### Test Conditions
+            function _testConditions(data) {
 
                 // If no condition, always pass
                 if (!query.condition) {
@@ -177,7 +265,7 @@ function orangeLive(address) {
                 var conditionsTestsFactory = {
                     // Between test
                     '~': function () {
-                        if (data[query.index || '_key'] >= conditionValue[0] && data[query.index || '_key'] <= conditionValue[1]) {
+                        if (data[query.index || 'key'] >= conditionValue[0] && data[query.index || 'key'] <= conditionValue[1]) {
                             return true;
                         }
 
@@ -185,7 +273,7 @@ function orangeLive(address) {
                     },
                     // Equals test
                     '=': function () {
-                        if (data[query.index || '_key'] === conditionValue) {
+                        if (data[query.index || 'key'] === conditionValue) {
                             return true;
                         }
 
@@ -193,7 +281,7 @@ function orangeLive(address) {
                     },
                     // Less then test
                     '<=': function () {
-                        if (data[query.index || '_key'] <= conditionValue) {
+                        if (data[query.index || 'key'] <= conditionValue) {
                             return true;
                         }
 
@@ -201,7 +289,7 @@ function orangeLive(address) {
                     },
                     // Greatest then test
                     '>=': function () {
-                        if (data[query.index || '_key'] >= conditionValue) {
+                        if (data[query.index || 'key'] >= conditionValue) {
                             return true;
                         }
 
@@ -209,7 +297,7 @@ function orangeLive(address) {
                     },
                     // Starts with test
                     '^': function () {
-                        if (data[query.index || '_key'].toLowerCase().indexOf(conditionValue.toLowerCase()) >= 0) {
+                        if (data[query.index || 'key'].toLowerCase().indexOf(conditionValue.toLowerCase()) === 0) {
                             return true;
                         }
 
@@ -220,6 +308,17 @@ function orangeLive(address) {
                 // Test condition
                 return conditionsTestsFactory[conditionCase]();
             }
+        }
+
+        // ## Load
+        function _load(consistent) {
+            _request('load', {
+                condition: query.condition || false,
+                consistent: consistent || false,
+                index: query.index || false,
+                limit: query.limit || false,
+                startAt: query.startAt || false
+            });
         }
 
         // ## Between
@@ -257,6 +356,12 @@ function orangeLive(address) {
             return this;
         }
 
+        function startAt(key) {
+            query.startAt = key;
+
+            return this;
+        }
+
         // ## Starts With
         function startsWith(value) {
             query.condition = ['^', value];
@@ -272,11 +377,21 @@ function orangeLive(address) {
         }
     }
 
-    // # Set
-    function set(data) {
+    // # Insert
+    function insert(data) {
         //
-        _request('set', {
-            set: data
+        _request('insert', {
+            data: data
+        });
+
+        return this;
+    }
+
+    // # Update
+    function update(data) {
+        //
+        _request('update', {
+            data: data
         });
 
         return this;

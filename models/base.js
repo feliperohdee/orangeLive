@@ -14,8 +14,7 @@ function _createSchema() {
     // # Set schema for tblLiveOne
     dynamodb.schema.set('tblLive1')
             .withHash('_namespace as STRING')
-            .withRange('_key as STRING')
-            .withDefault({_createdAt: 'TIMESTAMP'});
+            .withRange('_key as STRING');
 }
 
 // # Create Tables

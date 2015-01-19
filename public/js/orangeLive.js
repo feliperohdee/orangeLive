@@ -15,7 +15,7 @@ function orangeLive(address) {
     /*----------------------------*/
 
     // # Request
-    function _request(type, params, responseType) {
+    function _request(operation, params, responseType) {
         // Extend params with address
         params = _.extend(params || {}, {
             address: address,
@@ -23,11 +23,11 @@ function orangeLive(address) {
             responseType: responseType || false
         });
 
-        socket.emit('request', type, params);
+        socket.emit('request', operation, params);
     }
 
     // # On
-    function on(operation) {
+    function on(events) {
 
         var query = {};
         var dataSet = [];
@@ -49,250 +49,177 @@ function orangeLive(address) {
         // ## Construct
         function __construct() {
             // Append eventStack with {load, add, change, remove, collectionUpdate}, and callback
-            _.each(operation, function (callback, type) {
-                eventStack[type] = callback;
+            _.each(events, function (callback, event) {
+                eventStack[event] = callback;
             });
 
             // Request join to address
             _request('join');
 
-            // Delay 500ms to first load
-            _.debounce(_get, 500)();
+            // Request load data
+            setTimeout(function () {
+                _load();
+            }, 500);
 
             // Start listen sockets
             _bindSockets();
         }
 
-        // ## Bind Sockets
-        function _bindSockets() {
-
-            var isLoaded = false;
-
-            // ### Response Success
-            socket.on('responseSuccess', function (operation, result) {
-                //
-                var operationFactory = {
-                    // Insert
-                    insert: function () {
-                        // Dispatch [add, collectionUpdate] event
-                        _dispatchEvents(['add', 'collectionUpdate'], result.data, 'insert');
-                    },
-                    // Item
-                    item: function () {
-                        // Update Data Set
-                        dataSet = result.data;
-                        // Dispatch [load] event => might be called once per on object
-                        if (!isLoaded) {
-                            _dispatchEvents(['load'], result.data);
-                            isLoaded = true;
-                        }
-                    },
-                    // Query
-                    query: function () {
-                        // Update Data Set 
-                        dataSet = result.data;
-                        // Dispatch [load] event => might be called once per on object
-                        if (!isLoaded) {
-                            _dispatchEvents(['load'], result.data);
-                            isLoaded = true;
-                        }
-                    },
-                    // Update
-                    update: function () {
-                        // Dispatch [change, collectionUpdate] event
-                        _dispatchEvents(['change', 'collectionUpdate'], result.data, 'update');
-                    }
-                };
-
-                // Feed dataSet according to operation done
-                if (result.data) {
-                    // Call factory
-                    operationFactory[operation]();
-                }
-            });
-
-            // ### Response Error
-            socket.on('responseError', function (operation, err) {
-                console.error(operation, err);
-            });
-        }
-
-        // ## Dispatch Events
-        function _dispatchEvents(events, data, fromEvent) {
-            // Event Factory
-            var eventFactory = {
-                // Add Event
-                add: function (callback) {
-                    // Add just return data
-                    callback(data);
-                },
-                // Change Event
-                change: function (callback) {
-                    // Add just return data
-                    callback(data);
-                },
-                // Load Event
-                load: function (callback) {
-                    // Load just return data
-                    callback(data);
-                },
-                // Collection Update Event
-                collectionUpdate: function (callback) {
-                    var fromEventFactory = {
-                        // From insert event
-                        insert: function () {
-                            _insertCollection(data, callback);
-                        },
-                        // From update event
-                        update: function () {
-                            _updateCollection(data, callback);
-                        }
-                    };
-
-                    // Call factory
-                    if (_.isArray(dataSet)) {
-                        fromEventFactory[fromEvent]();
-                    }
-                }
-            };
-
-            // Iterate over events, and test with previous registered ~on
-            _.each(events, function (event) {
-                if (eventStack[event]) {
-                    // Call factory
-                    eventFactory[event](eventStack[event]);
-                }
-            });
-        }
-        
-        // ## Get
-        function _get() {
-            // Do Get
-            _request('get', {
+        // ## Load
+        function _load(consistent) {
+            _request('load', {
                 condition: query.condition || false,
+                consistent: consistent || false,
                 limit: query.limit || false,
                 index: query.index || false
             });
         }
 
-        //# # Insert in Collection
-        function _insertCollection(data, callback) {
-            if (_testCondition(data)) {
-                // If pass through condition test, push data, otherwise dataset keeps untouchable
-                dataSet.push(data);
-            }
+        // ## Bind Sockets
+        function _bindSockets() {
 
-            // Sort and Limit
-            dataSet = _organizeCollection(dataSet);
+            // ### Response Success
+            socket.on('responseSuccess', function (event, result) {
+                //
+                switch (event) {
+                    case 'load':
+                        // Update Data Set 
+                        dataSet = result.data;
 
-            // Dataset is array, callback all there
-            callback(dataSet);
-        }
-
-        // ## Organize Collection => Sort and Limit
-        function _organizeCollection(data) {
-            // Sort
-            if (query.index) {
-                data = _.sortBy(data, query.index || '_key');
-            }
-
-            // Limit
-            if (query.limit) {
-                data = data.slice(0, query.limit);
-            }
-
-            return data;
-        }
-
-        // ## Test Condition
-        function _testCondition(data) {
-
-            // If no condition, always pass
-            if (!query.condition) {
-                return true;
-            }
-
-            // Define conditions
-            var conditionCase = query.condition[0];
-            var conditionValue = query.condition[1];
-
-            if (query.condition[2]) {
-                conditionValue = [query.condition[1], query.condition[2]];
-            }
-
-            var conditionsTestsFactory = {
-                // Between test
-                '~': function () {
-                    if (data[query.index || '_key'] >= conditionValue[0] && data[query.index || '_key'] <= conditionValue[1]) {
-                        return true;
-                    }
-
-                    return false;
-                },
-                // Equals test
-                '=': function () {
-                    if (data[query.index || '_key'] === conditionValue) {
-                        return true;
-                    }
-
-                    return false;
-                },
-                // Less then test
-                '<=': function () {
-                    if (data[query.index || '_key'] <= conditionValue) {
-                        return true;
-                    }
-
-                    return false;
-                },
-                // Greatest then test
-                '>=': function () {
-                    if (data[query.index || '_key'] >= conditionValue) {
-                        return true;
-                    }
-
-                    return false;
-                },
-                // Starts with test
-                '^': function () {
-                    if (data[query.index || '_key'].toLowerCase().indexOf(conditionValue.toLowerCase()) >= 0) {
-                        return true;
-                    }
-
-                    return false;
+                        _dispatchEvents([event], result);
+                        break;
+                    default:
+                        //
+                        _dispatchEvents([event, 'collectionUpdate'], result);
                 }
-            };
+            });
 
-            // Test condition
-            return conditionsTestsFactory[conditionCase]();
+            // ### Response Error
+            socket.on('responseError', function (err) {
+                console.error(err);
+            });
         }
 
-        //# # Update in Collection
-        function _updateCollection(data, callback) {
+        // ## Dispatch Events
+        function _dispatchEvents(events, result) {
+            // Iterate over events, and test with previous registered ~on
+            _.each(events, function (event) {
+                //
+                var callback = eventStack[event];
 
-            var dataSetIndex = _.findIndex(dataSet, {_key: data._key});
+                if (callback) {
+                    // Call factory
+                    switch (event) {
+                        case 'add':
+                        case 'change':
+                        case 'load':
+                            // Just Return Data
+                            callback(result.data);
+                            break;
+                        case 'collectionUpdate':
+                            _onCollectionUpdate(result, callback);
+                            break;
+                    }
+                }
+            });
 
-            if (_testCondition(data)) {
-                // If pass through condition test, update data if exists
-                if (dataSetIndex >= 0) {
-                    // Update Item
-                    dataSet[dataSetIndex] = data;
-                } else {
-                    // Passed in the test but no belongs to collection yet, so insert it
+            // ### Insert in Collection
+            function _insertCollection(data, callback) {
+                if (_testCondition(data)) {
+                    // If pass through condition test, push data, otherwise dataset keeps untouchable
                     dataSet.push(data);
                 }
-            } else {
-                // If reproved in the test, remove data if exists
-                if (dataSetIndex >= 0) {
-                    dataSet.splice(dataSetIndex, 1);
+
+                // Sort
+                if (query.index) {
+                    dataSet = _.sortBy(dataSet, query.index || '_key');
+                }
+
+                // Limit
+                if (query.limit) {
+                    dataSet = dataSet.slice(0, query.limit);
+                }
+
+                // Dataset is array, callback all there
+                callback(dataSet);
+            }
+
+            // ### On Collection Update
+            function _onCollectionUpdate(result, callback) {
+                // Get operation which triggered Collection Update event
+                switch (result.operation) {
+                    case 'insert':
+                        _insertCollection(result.data, callback);
+                        break;
+                    case 'update':
+                        // Call consistent load again when update
+                        _load(true);
+                        break;
                 }
             }
 
-            // Sort and Limit
-            dataSet = _organizeCollection(dataSet);
+            // ### Test Condition
+            function _testCondition(data) {
 
-            // Dataset is array, callback all there
-            callback(dataSet);
+                // If no condition, always pass
+                if (!query.condition) {
+                    return true;
+                }
+
+                // Define conditions
+                var conditionCase = query.condition[0];
+                var conditionValue = query.condition[1];
+
+                if (query.condition[2]) {
+                    conditionValue = [query.condition[1], query.condition[2]];
+                }
+
+                var conditionsTestsFactory = {
+                    // Between test
+                    '~': function () {
+                        if (data[query.index || '_key'] >= conditionValue[0] && data[query.index || '_key'] <= conditionValue[1]) {
+                            return true;
+                        }
+
+                        return false;
+                    },
+                    // Equals test
+                    '=': function () {
+                        if (data[query.index || '_key'] === conditionValue) {
+                            return true;
+                        }
+
+                        return false;
+                    },
+                    // Less then test
+                    '<=': function () {
+                        if (data[query.index || '_key'] <= conditionValue) {
+                            return true;
+                        }
+
+                        return false;
+                    },
+                    // Greatest then test
+                    '>=': function () {
+                        if (data[query.index || '_key'] >= conditionValue) {
+                            return true;
+                        }
+
+                        return false;
+                    },
+                    // Starts with test
+                    '^': function () {
+                        if (data[query.index || '_key'].toLowerCase().indexOf(conditionValue.toLowerCase()) >= 0) {
+                            return true;
+                        }
+
+                        return false;
+                    }
+                };
+
+                // Test condition
+                return conditionsTestsFactory[conditionCase]();
+            }
         }
 
         // ## Between

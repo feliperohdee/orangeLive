@@ -13,14 +13,7 @@ function __construct() {
     io.on('connection', function (socket) {
         // # Request
         socket.on('request', function (operation, params) {
-            // Decode Address
-            var address = _decodeAddress(params.address);
-
-            // Append these keys to params
-            params.namespace = address.namespace;
-            params.key = address.key;
-            params.attribute = address.attribute;
-
+            //
             var instance = orangeLive(params, socket);
 
             if (instance[operation]) {
@@ -30,68 +23,32 @@ function __construct() {
     });
 }
 
-// # Decode Address
-function _decodeAddress(address) {
-    address = address.split('/');
-
-    return {
-        namespace: address[0],
-        key: address[1] || false,
-        attribute: address[2] || false
-    };
-}
-
 // # Orange Live
 function orangeLive(params, socket) {
     //
     return{
-        load: load,
         insert: insert,
+        item: item,
         join: join,
         leave: leave,
+        query: query,
         update: update
     };
 
     /*----------------------------*/
 
-    // # Load Operation
-    function load() {
-        // Define query or item operation
-        var operation = {};
-
-        if (params.key) {
-            operation = {
-                type: 'item',
-                callback: _item
-            };
-        } else {
-            operation = {
-                type: 'query',
-                callback: _query
-            };
-        }
-
-        // Execute Operation Callback
-        operation.callback().then(function (result) {
+    // # Item Operation
+    function item() {
+        // Execute Operation
+        _item().then(function (result) {
             //
-            // Normalize data if collection or item
-            switch (operation.type) {
-                case 'query':
-                    // Collection fetched
-                    result.data = _.map(result.data, function (data) {
-                        return _normalizeReponseData(data);
-                    });
-                    break;
-                case 'item':
-                    // Item fetched
-                    result.data = _normalizeReponseData(result.data);
-                    break;
-            }
+            // Normalize data
+            result.data = _normalizeReponseData(result.data);
 
-            _response().me().event('load').data(result);
+            _response().me().operation('item').data(result);
         }).catch(function (err) {
             //
-            _response().me().event('syncError:onLoad').error(err);
+            _response().me().operation('syncError:item').error(err);
         });
     }
 
@@ -112,13 +69,13 @@ function orangeLive(params, socket) {
         };
 
         // Immediate response
-        _response().all().event('insert').data(_normalizeReponseData(insertAttrs.set));
+        _response().all().operation('insert').data(_normalizeReponseData(insertAttrs.set));
 
         // Do insert sync and response status
         return _syncInsert(insertAttrs).then(function () {
-            _response().me().event('syncSuccess:onInsert');
+            _response().me().operation('syncSuccess:insert');
         }).catch(function (err) {
-            _response().me().event('syncError:onInsert').error(err);
+            _response().me().operation('syncError:insert').error(err);
         });
     }
 
@@ -138,11 +95,30 @@ function orangeLive(params, socket) {
         }
     }
 
+    // # Query Operation
+    function query() {
+        // Define query or item operation
+
+        // Execute Operation
+        _query().then(function (result) {
+            //
+            // Normalize data
+            result.data = _.map(result.data, function (data) {
+                return _normalizeReponseData(data);
+            });
+
+            _response().me().operation('query').data(result);
+        }).catch(function (err) {
+            //
+            _response().me().operation('syncError:query').error(err);
+        });
+    }
+
     // ## Update Operation
     function update() {
 
-        if (!params.key) {
-            _response.me().event('validationError').error(new Error('No valid keys provided. Please specify primary key field.'));
+        if (!params.where) {
+            _response.me().operation('validationError').error(new Error('No valid keys provided. Please specify primary key field.'));
             return;
         }
 
@@ -151,25 +127,28 @@ function orangeLive(params, socket) {
             params.data = _encodeIndexSet(params.indexes, params.data);
         }
 
+        // Append priority if exists
+        if (params.priority) {
+            params.data._pi = params.priority;
+        }
+
         // ## Update Operation
         var updateAttrs = {
-            set: _.extend(params.data, {
-                _pi: params.priority || 0 // Priority Index
-            }),
+            set: params.data,
             where: {
                 _namespace: params.namespace,
-                _key: params.key
+                _key: params.where
             }
         };
 
         // Immediate response
-        _response().all().event('update').data(_normalizeReponseData(_.extend(updateAttrs.set, updateAttrs.where)));
+        _response().all().operation('update').data(_normalizeReponseData(_.extend(updateAttrs.set, updateAttrs.where)));
 
         // Do update sync and response status
         return _syncUpdate(updateAttrs).then(function () {
-            _response().me().event('syncSuccess:onUpdate');
+            _response().me().operation('syncSuccess:update');
         }).catch(function (err) {
-            _response().me().event('syncError:onUpdate').error(err);
+            _response().me().operation('syncError:update').error(err);
         });
     }
 
@@ -204,15 +183,19 @@ function orangeLive(params, socket) {
 
         // String Index
         if (indexes.string) {
-            _.each(indexes.string, function (indexAttr, key) {
-                result['_si' + (key % 2)] = set[indexAttr]; // key % 2 guarantees 0 or 1
+            _.each(indexes.string, function (attribute, key) {
+                if (set[attribute]) { // if set attribute exists
+                    result['_si' + (key % 2)] = set[attribute]; // key % 2 guarantees 0 or 1
+                }
             });
         }
 
         // Number Index
         if (indexes.number) {
-            _.each(indexes.number, function (indexAttr, key) {
-                result['_ni' + (key % 2)] = set[indexAttr]; // key % 2 guarantees 0 or 1
+            _.each(indexes.number, function (attribute, key) {
+                if (set[attribute]) { // if set attribute exists
+                    result['_ni' + (key % 2)] = set[attribute]; // key % 2 guarantees 0 or 1
+                }
             });
         }
 
@@ -226,8 +209,8 @@ function orangeLive(params, socket) {
 
         var _data = _.extend({}, data); // New reference is required do never influence in another operation
 
-        if (_data.key) {
-            data.key = data._key;
+        if (_data._key) {
+            _data.key = data._key;
         }
 
         delete _data._key;
@@ -253,7 +236,7 @@ function orangeLive(params, socket) {
         return{
             all: all,
             data: data,
-            event: event,
+            operation: operation,
             error: error,
             me: me
         };
@@ -263,9 +246,9 @@ function orangeLive(params, socket) {
         // # Exec
         function _exec() {
             if (attrs.err) {
-                io.to(attrs.to).emit('responseError', attrs.event, attrs.err);
+                io.to(attrs.to).emit('responseError', attrs.operation, attrs.err);
             } else {
-                io.to(attrs.to).emit('responseSuccess', attrs.event, attrs.data);
+                io.to(attrs.to).emit('responseSuccess', attrs.operation, attrs.data);
             }
         }
 
@@ -284,8 +267,8 @@ function orangeLive(params, socket) {
         }
 
         // # Event
-        function event(event) {
-            attrs.event = event;
+        function operation(operation) {
+            attrs.operation = operation;
 
             return this;
         }
@@ -340,22 +323,22 @@ function orangeLive(params, socket) {
         // Item Operation
         var itemAttrs = {
             where: {
-                _namespace: params.namespace,
-                _key: params.key
+                _namespace: params.namespace
             }
         };
 
-        // If there is attribute, select
-        if (params.attribute) {
-            // Create an alias before
-            itemAttrs.alias = _buildAlias([params.attribute]);
-            itemAttrs.select = '#' + params.attribute;
+        // Set where if exists, using key
+        if (params.query) {
+            itemAttrs.where._key = params.query;
         }
 
         // Select
         if (params.select) {
             // Split comma's
             var selectArray = params.select.split(',');
+
+            // Always select _key
+            selectArray.push('_key');
 
             // Create Alias
             itemAttrs.alias = _buildAlias(selectArray);
@@ -380,15 +363,18 @@ function orangeLive(params, socket) {
             }
         };
 
-        // Set default condition if exists, using key
-        if (params.condition) {
-            queryAttrs.where._key = params.condition;
+        // Set where if exists, using key
+        if (params.where) {
+            queryAttrs.where._key = params.where;
         }
 
         // Select
         if (params.select) {
             // Split comma's
             var selectArray = params.select.split(',');
+
+            // Always select _key
+            selectArray.push('_key');
 
             // Create Alias
             queryAttrs.alias = _buildAlias(selectArray);
@@ -406,12 +392,12 @@ function orangeLive(params, socket) {
             // Set indexed by
             queryAttrs.indexedBy = index.name;
 
-            // Set condition if exists
-            if (params.condition) {
-                // Remove default key condition
+            // Set where if exists
+            if (params.where) {
+                // Remove default key where
                 delete queryAttrs.where._key;
-                // Append indexed condition
-                queryAttrs.where[index.attribute] = params.condition;
+                // Append indexed where
+                queryAttrs.where[index.attribute] = params.where;
             }
         }
 

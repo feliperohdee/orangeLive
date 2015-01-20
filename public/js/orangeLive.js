@@ -8,12 +8,16 @@ function orangeLive(address) {
         key: address.split('/')[1] || false,
         attribute: address.split('/')[2] || false
     };
-    var socket = io();
+
+    var socket = new io({
+        forceNew: true
+    });
+    
     var indexes = {
         string: ['name'],
         number: ['height', 'age']
     };
-    
+
     var cInstance = collection();
     var iInstance = item();
 
@@ -425,7 +429,7 @@ function orangeLive(address) {
             if (_select) {
                 data = _removeNonSelected(data, _select);
             }
-            
+
             // Test Conditions
             if (_testConditions(data)) {
                 // If pass through condition test, push data

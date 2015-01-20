@@ -13,6 +13,7 @@ function orangeLive(address) {
         string: ['name'],
         number: ['height', 'age']
     };
+    
     var cInstance = collection();
     var iInstance = item();
 
@@ -30,13 +31,13 @@ function orangeLive(address) {
     // # Factory
     function _factory() {
         //
-        if(!addressParams.key){
+        if (!addressParams.key) {
             // Return collection instance
             return cInstance.api();
             // Return item instance
-        }else if(!addressParams.attribute){
+        } else if (!addressParams.attribute) {
             return iInstance.api().key(addressParams.key);
-        }else{
+        } else {
             // Return item instance with select attributes
             return iInstance.api().key(addressParams.key).select(addressParams.attribute);
         }
@@ -152,6 +153,21 @@ function orangeLive(address) {
                     break;
             }
         }
+    }
+
+    // # Remove Non Selected
+    function _removeNonSelected(data, select) {
+        //
+        var result = {};
+
+        _.each(data, function (value, key) {
+            // If key belong to slect, and different of key
+            if (select.indexOf(key) >= 0 || key === 'key') {
+                result[key] = value;
+            }
+        });
+
+        return result;
     }
 
     // # Collection
@@ -405,14 +421,19 @@ function orangeLive(address) {
 
         // ## Insert Item into collection
         function insertCollection(data, callback) {
-            //
+            // If select, remove extras
+            if (_select) {
+                data = _removeNonSelected(data, _select);
+            }
+            
+            // Test Conditions
             if (_testConditions(data)) {
                 // If pass through condition test, push data
                 _dataSet.push(data);
-            }
 
-            // Sort and Limit
-            _dataSet = _sortAndLimit(_dataSet);
+                // Sort and Limit
+                _dataSet = _sortAndLimit(_dataSet);
+            }
 
             // Callback
             callback(_dataSet);
@@ -464,6 +485,11 @@ function orangeLive(address) {
 
         // ## Update Item in Collection
         function updateCollection(data, callback) {
+            // If select, remove extras
+            if (_select) {
+                data = _removeNonSelected(data, _select);
+            }
+
             // Get index
             var dataIndex = _.findIndex(_dataSet, {key: data.key});
 
@@ -471,11 +497,14 @@ function orangeLive(address) {
                 // Passed into tests, update data if exists
                 if (dataIndex >= 0) {
                     // Update Item
-                    _dataSet[dataIndex] = data;
+                    _.extend(_dataSet[dataIndex], data);
                 } else {
                     // Passed into tests but not belongs to collection yet, insert it
                     _dataSet.push(data);
                 }
+
+                // Sort and Limit
+                _dataSet = _sortAndLimit(_dataSet);
             } else {
                 // If reproved in the test, remove data if exists
                 if (dataIndex >= 0) {
@@ -483,11 +512,8 @@ function orangeLive(address) {
                 }
             }
 
-            // Sort and Limit
-            _dataSet = _sortAndLimit(_dataSet);
-
             //Callback
-            callback();
+            callback(_dataSet);
         }
     }
 

@@ -13,7 +13,6 @@ function __construct() {
     io.on('connection', function (socket) {
         // # Request
         socket.on('request', function (operation, params) {
-            //
             var instance = orangeLive(params, socket);
 
             if (instance[operation]) {

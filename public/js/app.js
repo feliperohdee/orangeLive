@@ -1,12 +1,16 @@
 // # App
+//var instance = orangeLive('*').select('name, height, age').useIndex('height');
+var instance = orangeLive('*/-ci547pll0000062nr1va9ndcy/name');
 
-var instance = orangeLive('*/-ci547pll0000062nr1va9ndcy');
-
-var item = instance.on('load', function (data) {
-    console.log('On Load Event', data);
+instance.on('load', function (data) {
+    console.log('instance load', data);
     updateView(data);
+}).on('add', function (data) {
+    console.log('On add Event', data);
 }).on('change', function (data) {
     console.log('On change Event', data);
+}).on('fetch', function (data) {
+    console.log('On fetch Event', data);
     updateView(data);
 });
 
@@ -23,18 +27,19 @@ function updateView(data) {
     }
 }
 
-/*
- function add() {
- instance.insert({
- name: 'Rohde Test',
- height: getRandomInt(10, 90),
- age: getRandomInt(105, 115)
- });
- }
- */
+var instance2 = orangeLive('*/-ci547pll0000062nr1va9ndcy');
+
+function add() {
+    instance.insert({
+        name: 'Rohde Test',
+        height: getRandomInt(10, 90),
+        age: getRandomInt(105, 115),
+        address: 'floripa'
+    });
+}
 
 function push() {
-    item.push('test', {
+    instance2.push('test', {
         name: 'Rohde Test',
         height: getRandomInt(0, 90),
         age: getRandomInt(105, 110)
@@ -42,10 +47,11 @@ function push() {
 }
 
 function update() {
-    item.update({
+    instance2.update({
         //name: 'Rohde Test',
-        height: getRandomInt(0, 90)
-        //age: getRandomInt(105, 110)
+        height: getRandomInt(0, 90),
+        age: getRandomInt(105, 110),
+        address: 'floripa'
     }, 1);
 }
 

@@ -1,6 +1,6 @@
 // # App
 //var instance = orangeLive('*').select('name, height, age').useIndex('height');
-var instance = orangeLive('*/-ci547pll0000062nr1va9ndcy/array').on('load', function (data) {
+var instance = orangeLive('*').select('name').last(4).on('load', function (data) {
     console.log('instance 1', data);
     updateView(data);
 }).on('add', function (data) {
@@ -26,16 +26,9 @@ function updateView(data) {
 }
 
 
-var instance2 = orangeLive('*/-ci547pll0000062nr1va9ndcy/array').on('load', function (data) {
+var instance2 = orangeLive('*/-ci547pll0000062nr1va9ndcy/rohde').on('load', function (data) {
     console.log('instance 2', data);
 });
-
-setTimeout(function(){
-    console.log('atomic');
-    
-    instance2.atomicUpdate(0900);
-    
-},1000);
 
 function add() {
     instance.insert({
@@ -44,6 +37,14 @@ function add() {
         age: getRandomInt(105, 115),
         address: 'floripa'
     });
+}
+
+function increment(){
+    instance2.increment(1);
+}
+
+function decrement(){
+    instance2.decrement(1);
 }
 
 function push() {

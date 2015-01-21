@@ -27,7 +27,7 @@ function __construct() {
 function orangeLive(params, socket) {
     //
     return{
-        atomicUpdate: atomicUpdate,
+        updateAtomic: updateAtomic,
         insert: insert,
         item: item,
         join: join,
@@ -37,42 +37,6 @@ function orangeLive(params, socket) {
     };
 
     /*----------------------------*/
-
-    // # Atomic Update
-    function atomicUpdate() {
-        //
-        var updateAttrs = {};
-
-        Promise.try(function () {
-            // Build Alias
-            var alias = _buildAlias(params.set.attribute, params.set.value);
-
-            if (!alias) {
-                throw new Error('Invalid attribute or value.');
-            }
-
-            updateAttrs = {
-                alias: alias.data,
-                set: 'SET ' + alias.map.names[0] + ' = ' + alias.map.names[0] + ' + ' + alias.map.values[0],
-                where: {
-                    _namespace: params.namespace,
-                    _key: params.where
-                }
-            };
-
-            // Immediate response
-            _response().all().operation('atomicUpdate').data(_normalizeReponseData(_.extend({
-                value: params.set.value
-            }, updateAttrs.where)));
-
-            // Do update sync and response status
-            return _syncUpdate(updateAttrs);
-        }).then(function (result) {
-            _response().me().operation('syncSuccess:atomicUpdate');
-        }).catch(function (err) {
-            _response().me().operation('syncError:atomicUpdate').error(err);
-        });
-    }
 
     // # Item Operation
     function item() {
@@ -189,6 +153,50 @@ function orangeLive(params, socket) {
         });
     }
 
+    // # Update Atomic
+    function updateAtomic() {
+        //
+        var updateAttrs = {};
+
+        Promise.try(function () {
+            // Build Alias
+            var alias = _buildAlias(params.set.attribute, params.set.value);
+
+            if (!alias) {
+                throw new Error('Invalid attribute or value.');
+            }
+
+            updateAttrs = {
+                alias: alias.data,
+                set: 'ADD ' + alias.map.names[0] + ' ' + alias.map.values[0],
+                where: {
+                    _namespace: params.namespace,
+                    _key: params.where
+                }
+            };
+
+            // Immediate response, used params.set instead of updateAttrs.set because the last one is an expression, not object
+            _response()
+                    .all()
+                    .operation('updateAtomic')
+                    .data(_normalizeReponseData(_.extend(params.set, updateAttrs.where)));
+
+            // Do update sync and response status
+            return _syncUpdate(updateAttrs);
+        }).then(function () {
+            // Response success
+            _response()
+                    .me()
+                    .operation('syncSuccess:updateAtomic');
+        }).catch(function (err) {
+            // Response error
+            _response()
+                    .me()
+                    .operation('syncError:updateAtomic')
+                    .error(err);
+        });
+    }
+
     // # Discover Index
     function _discoverIndex(indexes, index) {
         var result = false;
@@ -217,6 +225,14 @@ function orangeLive(params, socket) {
     // # Encode Index Set
     function _encodeIndexSet(indexes, set) {
         var result = {};
+        
+        // Replace set.key for set._key
+        if(set.key){
+            // Replace It
+            set._key = set.key;
+            // Delete It
+            delete set.key;
+        }
 
         // String Index
         if (indexes.string) {
@@ -412,6 +428,7 @@ function orangeLive(params, socket) {
         // Query Operation
         var queryAttrs = {
             consistent: params.consistent,
+            desc: params.desc,
             limit: params.limit,
             startAt: params.startAt,
             where: {

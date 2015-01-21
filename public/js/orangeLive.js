@@ -61,6 +61,8 @@ function orangeLive(address) {
         //
         socket.on('responseSuccess', function (operation, result) {
             switch (operation) {
+                case 'delete':
+                    break;
                 case 'query':
                     // Update Data set
                     cInstance.setDataSet(result.data);
@@ -108,7 +110,9 @@ function orangeLive(address) {
                     _dispatchEvent('item', 'change', result);
                     _dispatchEvent('item', 'fetch:change', result);
                     break;
-                case 'delete':
+                case 'updateAtomic':
+                    _dispatchEvent('collection', 'fetch:atomic', result);
+                    _dispatchEvent('item', 'fetch:atomic', result);
                     break;
                 default:
                     console.log(operation, result);
@@ -141,6 +145,9 @@ function orangeLive(address) {
                 case 'collection.fetch:add':
                     cInstance.insertCollection(result, callback);
                     break;
+                case 'collection.fetch:atomic':
+                    cInstance.updateCollection(cInstance.computeAtomic(result), callback);
+                    break;
                 case 'collection.fetch:change':
                     cInstance.updateCollection(result, callback);
                     break;
@@ -151,6 +158,12 @@ function orangeLive(address) {
                     // test if item changed is item displayed, than callback
                     if (iInstance.hasSameKey(result)) {
                         callback(result);
+                    }
+                    break;
+                case 'item.fetch:atomic':
+                    // test if item changed is item displayed, than callback
+                    if (iInstance.hasSameKey(result)) {
+                        iInstance.updateItem(iInstance.computeAtomic(result), callback);
                     }
                     break;
                 case 'item.fetch:change':
@@ -185,6 +198,7 @@ function orangeLive(address) {
     function collection() {
         //
         var _dataSet = [];
+        var _desc = false;
         var _events = {};
         var _index = false;
         var _limit = false;
@@ -200,6 +214,7 @@ function orangeLive(address) {
 
         return{
             api: api,
+            computeAtomic: computeAtomic,
             getCallback: getCallback,
             getDataSet: getDataSet,
             getPagination: getPagination,
@@ -217,6 +232,7 @@ function orangeLive(address) {
         function _get(consistent) {
             _request('query', {
                 consistent: consistent || false,
+                desc: _desc || false,
                 index: _index || false,
                 limit: _limit || false,
                 query: _query || false,
@@ -237,8 +253,11 @@ function orangeLive(address) {
         // ## Sort and Limit
         function _sortAndLimit(data) {
             // Sort
-            if (_index) {
-                data = _.sortBy(data, _index || 'key');
+            data = _.sortBy(data, _index || 'key');
+            
+            // If desc, reverse array
+            if(_desc){
+                data = data.reverse();
             }
 
             // Limit
@@ -308,11 +327,15 @@ function orangeLive(address) {
             setTimeout(_get, 150);
 
             return {
+                asc: asc,
                 between: between,
+                desc: desc,
                 equals: equals,
-                lessThan: lessThan,
+                first: first,
                 greatestThan: greatestThan,
                 insert: insert,
+                last: last,
+                lessThan: lessThan,
                 limit: limit,
                 on: on,
                 push: push,
@@ -323,10 +346,24 @@ function orangeLive(address) {
             };
 
             /*--------------------------------------*/
+            
+            // ## Asc
+            function asc() {
+                _desc = false;
+
+                return this;
+            }
 
             // ## Between
             function between(valueLow, valueHigh) {
                 _query = ['~', valueLow, valueHigh];
+
+                return this;
+            }
+            
+            // ## Desc
+            function desc() {
+                _desc = true;
 
                 return this;
             }
@@ -337,11 +374,12 @@ function orangeLive(address) {
 
                 return this;
             }
-
-            // ## Less Than
-            function lessThan(value) {
-                _query = ['<=', value];
-
+            
+            // ## First, ALIAS for Limit and Ascendent
+            function first(value){
+                limit(value);
+                asc();
+                
                 return this;
             }
 
@@ -355,6 +393,21 @@ function orangeLive(address) {
             // ## Insert
             function insert(set, priority) {
                 _insert(set, priority);
+
+                return this;
+            }
+            
+            // ## Last, ALIAS for Limit and Descendent
+            function last(value){
+                limit(value);
+                desc();
+                
+                return this;
+            }
+            
+            // ## Less Than
+            function lessThan(value) {
+                _query = ['<=', value];
 
                 return this;
             }
@@ -413,6 +466,27 @@ function orangeLive(address) {
 
                 return this;
             }
+        }
+
+        // ## Compute Atomic Value
+        function computeAtomic(data) {
+            //
+            var result = {
+                key: data.key
+            };
+
+            // Fetch index from dataset
+            var dataIndex = _.findIndex(_dataSet, {key: data.key});
+
+            // Test if value belongs to actual dataset
+            if (dataIndex >= 0) {
+                // Get actual Value
+                var actualValue = _dataSet[dataIndex][data.attribute] || 0;
+
+                result[data.attribute] = parseInt(actualValue) + parseInt(data.value);
+            }
+
+            return result;
         }
 
         // ## Get Callback
@@ -538,9 +612,10 @@ function orangeLive(address) {
 
         return{
             api: api,
-            hasSameKey: hasSameKey,
+            computeAtomic: computeAtomic,
             getCallback: getCallback,
             getDataSet: getDataSet,
+            hasSameKey: hasSameKey,
             setDataSet: setDataSet,
             updateItem: updateItem
         };
@@ -557,13 +632,13 @@ function orangeLive(address) {
         }
 
         // ## Atomic Update
-        function _atomicUpdate(set) {
-            _request('atomicUpdate', {
+        function _updateAtomic(set) {
+            _request('updateAtomic', {
                 set: set,
                 where: _where || false
             });
         }
-        
+
         // ## Update
         function _update(set, priority) {
             _request('update', {
@@ -579,21 +654,25 @@ function orangeLive(address) {
             setTimeout(_get, 150);
 
             return{
-                atomicUpdate: atomicUpdate,
+                decrement: decrement,
+                increment: increment,
                 on: on,
                 select: select,
                 update: update,
+                updateAtomic: updateAtomic,
                 where: where
             };
 
             /*--------------------------------------*/
-            
-            // ## Atomic Update
-            function atomicUpdate(value, attribute){
-                _atomicUpdate({
-                    attribute: attribute || addressParams.attribute,
-                    value: value
-                });
+
+            // ## Decrement, ALIAS for -updateAtomic
+            function decrement(value, attribute) {
+                updateAtomic(-Math.abs(value || 1), attribute);
+            }
+
+            // ## Increment, ALIAS for +updateAtomic
+            function increment(value, attribute) {
+                updateAtomic(Math.abs(value || 1), attribute);
             }
 
             // ## On
@@ -620,6 +699,22 @@ function orangeLive(address) {
                 return this;
             }
 
+            // ## Update Atomic
+            function updateAtomic(value, attribute) {
+                // If no attribute, try get from address params
+                attribute = attribute || addressParams.attribute;
+
+                // test if is number, or empty
+                if (_.isNumber(_dataSet[attribute]) || _.isEmpty(_dataSet[attribute])) {
+                    _updateAtomic({
+                        attribute: attribute,
+                        value: value
+                    });
+                } else {
+                    console.error('You can\'t do atomic operation in non NUMBER or EMPTY values.');
+                }
+            }
+
             // ## Where
             function where(where) {
                 _where = where;
@@ -628,9 +723,19 @@ function orangeLive(address) {
             }
         }
 
-        // ## Has Same Key
-        function hasSameKey(data) {
-            return _dataSet.key === data.key;
+        // ## Compute Atomic Value
+        function computeAtomic(data) {
+            //
+            var result = {
+                key: data.key
+            };
+
+            // Get actual Value
+            var actualValue = _dataSet[data.attribute] || 0;
+
+            result[data.attribute] = parseInt(actualValue) + parseInt(data.value);
+
+            return result;
         }
 
         // ## Get Callback
@@ -641,6 +746,11 @@ function orangeLive(address) {
         // ## Get Data
         function getDataSet() {
             return _dataSet;
+        }
+
+        // ## Has Same Key
+        function hasSameKey(data) {
+            return _dataSet.key === data.key;
         }
 
         // ## Set Data

@@ -21,20 +21,15 @@ function orangeLive(address) {
     var cInstance = collection();
     var iInstance = item();
 
-    __construct();
-
-    return _factory();
+    return __construct();
 
     /*----------------------------*/
 
     // # Construct
     function __construct() {
+        // Start sockets
         _bindSockets();
-    }
 
-    // # Factory
-    function _factory() {
-        //
         if (!addressParams.key) {
             // Return collection instance
             return cInstance.api();
@@ -76,6 +71,10 @@ function orangeLive(address) {
                 case 'broadcast:updateAtomic':
                     _dispatchEvent('collection', 'fetch:atomic', result);
                     _dispatchEvent('item', 'fetch:atomic', result);
+                    break;
+                case 'broadcast:pushList':
+                    _dispatchEvent('collection', 'fetch:pushList', result);
+                    _dispatchEvent('item', 'fetch:pushList', result);
                     break;
                 case 'sync:item':
                     // Update Data set
@@ -143,33 +142,52 @@ function orangeLive(address) {
                     callback(result);
                     break;
                 case 'collection.fetch:add':
-                    cInstance.insertCollection(result, callback);
-                    break;
-                case 'collection.fetch:atomic':
-                    cInstance.updateCollection(cInstance.computeAtomic(result), callback);
-                    break;
                 case 'collection.fetch:change':
                     cInstance.updateCollection(result, callback);
+                    break;
+                case 'collection.fetch:atomic':
+                    var atomic = cInstance.handleSpecialOperations('atomic', result);
+
+                    if (atomic) {
+                        cInstance.updateCollection(atomic, callback);
+                    }
+                    break;
+                case 'collection.fetch:pushList':
+                    var pushed = cInstance.handleSpecialOperations('pushList', result);
+
+                    if (pushed) {
+                        cInstance.updateCollection(pushed, callback);
+                    }
                     break;
                 case 'collection.load':
                     callback(result.data, result.pagination);
                     break;
                 case 'item.change':
                     // test if item changed is item displayed, than callback
-                    if (iInstance.hasSameKey(result)) {
+                    if (iInstance.isOwnData(result)) {
                         callback(result);
                     }
                     break;
                 case 'item.fetch:atomic':
-                    // test if item changed is item displayed, than callback
-                    if (iInstance.hasSameKey(result)) {
-                        iInstance.updateItem(iInstance.computeAtomic(result), callback);
+                    // test if item changed is item displayed and has atomicity, than callback
+                    var atomic = iInstance.handleSpecialOperations('atomic', result);
+
+                    if (iInstance.isOwnData(result) && atomic) {
+                        iInstance.updateItem(atomic, callback);
                     }
                     break;
                 case 'item.fetch:change':
                     // test if item changed is item displayed, than callback
-                    if (iInstance.hasSameKey(result)) {
+                    if (iInstance.isOwnData(result)) {
                         iInstance.updateItem(result, callback);
+                    }
+                    break;
+                case 'item.fetch:pushList':
+                    // test if item changed is item displayed and has list, than callback
+                    var pushed = iInstance.handleSpecialOperations('pushList', result);
+
+                    if (iInstance.isOwnData(result) && pushed) {
+                        iInstance.updateItem(pushed, callback);
                     }
                     break;
                 case 'item.load':
@@ -214,11 +232,10 @@ function orangeLive(address) {
 
         return{
             api: api,
-            computeAtomic: computeAtomic,
             getCallback: getCallback,
             getDataSet: getDataSet,
             getPagination: getPagination,
-            insertCollection: insertCollection,
+            handleSpecialOperations: handleSpecialOperations,
             pageNext: pageNext,
             pagePrev: pagePrev,
             setDataSet: setDataSet,
@@ -468,27 +485,6 @@ function orangeLive(address) {
             }
         }
 
-        // ## Compute Atomic Value
-        function computeAtomic(data) {
-            //
-            var result = {
-                key: data.key
-            };
-
-            // Fetch index from dataset
-            var dataIndex = _.findIndex(_dataSet, {key: data.key});
-
-            // Test if value belongs to actual dataset
-            if (dataIndex >= 0) {
-                // Get actual Value
-                var actualValue = _dataSet[dataIndex][data.attribute] || 0;
-
-                result[data.attribute] = parseInt(actualValue) + parseInt(data.value);
-            }
-
-            return result;
-        }
-
         // ## Get Callback
         function getCallback(event) {
             return _events[event.split(':')[0]]; // Explode second rule if exists
@@ -504,24 +500,35 @@ function orangeLive(address) {
             return _pagination;
         }
 
-        // ## Insert Item into collection
-        function insertCollection(data, callback) {
-            // If select, remove extras
-            if (_select) {
-                data = _removeNonSelected(data, _select);
+        // # Handle special operations like, atomic or push list operations
+        function handleSpecialOperations(operation, data) {
+            //
+            var result = false;
+
+            // Fetch index from dataset
+            var dataIndex = _.findIndex(_dataSet, {key: data.key});
+
+            // Test if value belongs to actual dataset
+            if (dataIndex >= 0) {
+                //
+                result = {
+                    key: data.key
+                };
+
+                // Get actual Value
+                var actualValue = _dataSet[dataIndex][data.attribute];
+
+                switch (operation) {
+                    case 'atomic':
+                        result[data.attribute] = parseInt(actualValue) + parseInt(data.value);
+                        break
+                    case 'pushList':
+                        result[data.attribute] = actualValue.concat(data.value);
+                        break;
+                }
             }
 
-            // Test Conditions
-            if (_testConditions(data)) {
-                // If pass through condition test, push data
-                _dataSet.push(data);
-
-                // Sort and Limit
-                _dataSet = _sortAndLimit(_dataSet);
-            }
-
-            // Callback
-            callback(_dataSet);
+            return result;
         }
 
         // ## Page Next
@@ -568,7 +575,7 @@ function orangeLive(address) {
             _.extend(_pagination, data);
         }
 
-        // ## Update Item in Collection
+        // ## Update Collection
         function updateCollection(data, callback) {
             // If select, remove extras
             if (_select) {
@@ -579,19 +586,19 @@ function orangeLive(address) {
             var dataIndex = _.findIndex(_dataSet, {key: data.key});
 
             if (_testConditions(data)) {
-                // Passed into tests, update data if exists
+                // Test OK, update data if exists, otherwise push
                 if (dataIndex >= 0) {
                     // Update Item
                     _.extend(_dataSet[dataIndex], data);
                 } else {
-                    // Passed into tests but not belongs to collection yet, insert it
+                    // Push Item
                     _dataSet.push(data);
                 }
 
                 // Sort and Limit
                 _dataSet = _sortAndLimit(_dataSet);
             } else {
-                // If reproved in the test, remove data if exists
+                // Test NOT OK, remove data if exists
                 if (dataIndex >= 0) {
                     _dataSet.splice(dataIndex, 1);
                 }
@@ -612,10 +619,10 @@ function orangeLive(address) {
 
         return{
             api: api,
-            computeAtomic: computeAtomic,
             getCallback: getCallback,
             getDataSet: getDataSet,
-            hasSameKey: hasSameKey,
+            handleSpecialOperations: handleSpecialOperations,
+            isOwnData: isOwnData,
             setDataSet: setDataSet,
             updateItem: updateItem
         };
@@ -639,6 +646,14 @@ function orangeLive(address) {
             });
         }
 
+        // ## Push List
+        function _pushList(set) {
+            _request('pushList', {
+                set: set,
+                where: _where || false
+            });
+        }
+
         // ## Update
         function _update(set, priority) {
             _request('update', {
@@ -656,6 +671,7 @@ function orangeLive(address) {
             return{
                 decrement: decrement,
                 increment: increment,
+                pushList: pushList,
                 on: on,
                 select: select,
                 update: update,
@@ -673,6 +689,22 @@ function orangeLive(address) {
             // ## Increment, ALIAS for +updateAtomic
             function increment(value, attribute) {
                 updateAtomic(Math.abs(value || 1), attribute);
+            }
+
+            // ## Push List
+            function pushList(value, attribute) {
+                // If no attribute, try get from address params
+                attribute = attribute || addressParams.attribute;
+
+                // test if is array
+                if (_.isArray(_dataSet[attribute])) {
+                    _pushList({
+                        attribute: attribute,
+                        value: value
+                    });
+                } else {
+                    console.error('You can\'t push into a non LIST attribute.');
+                }
             }
 
             // ## On
@@ -705,13 +737,13 @@ function orangeLive(address) {
                 attribute = attribute || addressParams.attribute;
 
                 // test if is number, or empty
-                if (_.isNumber(_dataSet[attribute]) || _.isEmpty(_dataSet[attribute])) {
+                if (_.isNumber(_dataSet[attribute])) {
                     _updateAtomic({
                         attribute: attribute,
                         value: value
                     });
                 } else {
-                    console.error('You can\'t do atomic operation in non NUMBER or EMPTY values.');
+                    console.error('You can\'t do atomic operations in non NUMBER attribute.');
                 }
             }
 
@@ -723,17 +755,24 @@ function orangeLive(address) {
             }
         }
 
-        // ## Compute Atomic Value
-        function computeAtomic(data) {
+        // # Handle special operations like, atomic or push list operations
+        function handleSpecialOperations(operation, data) {
             //
             var result = {
                 key: data.key
             };
 
             // Get actual Value
-            var actualValue = _dataSet[data.attribute] || 0;
+            var actualValue = _dataSet[data.attribute];
 
-            result[data.attribute] = parseInt(actualValue) + parseInt(data.value);
+            switch (operation) {
+                case 'atomic':
+                    result[data.attribute] = parseInt(actualValue) + parseInt(data.value);
+                    break
+                case 'pushList':
+                    result[data.attribute] = actualValue.concat(data.value);
+                    break;
+            }
 
             return result;
         }
@@ -749,7 +788,7 @@ function orangeLive(address) {
         }
 
         // ## Has Same Key
-        function hasSameKey(data) {
+        function isOwnData(data) {
             return _dataSet.key === data.key;
         }
 

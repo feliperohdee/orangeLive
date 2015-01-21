@@ -28,7 +28,7 @@ function __construct() {
                     live.socketResponse()
                             .me()
                             .operation('sync:' + operation)
-                            .error(err.message);
+                            .error(err);
                 });
             }
         });
@@ -43,6 +43,7 @@ function __construct() {
             item: item,
             join: join,
             leave: leave,
+            pushList: pushList,
             query: query,
             socketResponse: socketResponse,
             update: update
@@ -119,7 +120,7 @@ function __construct() {
                 return insertParams;
             }).then(function (insertParams) {
                 // Sync Data
-                return base.insert(insertParams).then(function(){
+                return base.insert(insertParams).then(function () {
                     return true;
                 });
             });
@@ -144,6 +145,57 @@ function __construct() {
             if (params.namespace !== socket.id) {
                 socket.leave(params.namespace);
             }
+        }
+
+        // # Push List Operation
+        function pushList() {
+            return Promise.try(function () {
+                // Build Alias
+                // Double array required => First to perform _buildAlias and another is the kind of data
+                var alias = _buildAlias(params.set.attribute, [[params.set.value]]);
+
+                if (!alias) {
+                    throw new Error('Invalid attribute or value.');
+                }
+
+                return alias;
+            }).then(function (alias) {
+                // Build expression and define update params
+                var expression;
+
+                if (_.isObject(params.set.value)) {
+                    // Expression for [{map}]
+                    expression = 'SET ' + alias.map.names[0] + ' = list_append(' + alias.map.names[0] + ', ' + alias.map.values[0] + ')';
+                } else {
+                    // Expression for SS or NS
+                    expression = 'ADD ' + alias.map.names[0] + ' ' + alias.map.values[0];
+                }
+
+                return {
+                    alias: alias.data,
+                    set: expression,
+                    where: {
+                        _namespace: params.namespace,
+                        _key: params.where
+                    }
+                };
+            }).then(function (updateParams) {
+                // Broadcast Operation
+                socketResponse()
+                        .all()
+                        .operation('broadcast:pushList')
+                        .data(_normalizeReponseData(_.extend({
+                            attribute: params.set.attribute,
+                            value: params.set.value
+                        }, updateParams.where)));
+
+                return updateParams;
+            }).then(function (updateParams) {
+                // Sync Data
+                return base.update(updateParams).then(function (res) {
+                    return true;
+                });
+            });
         }
 
         // # Query Operation
@@ -315,7 +367,7 @@ function __construct() {
                 return updateParams;
             }).then(function (updateParams) {
                 // Sync Data
-                return base.update(updateParams).then(function(){
+                return base.update(updateParams).then(function () {
                     return true;
                 });
             });
@@ -324,17 +376,39 @@ function __construct() {
         // # Update Atomic
         function updateAtomic() {
             return Promise.try(function () {
+                // Seek for Index
+                var index = _discoverIndex(params.set.attribute);
+                var aliasNames = [params.set.attribute];
+
+                // If index, insert it into alias names
+                if (index) {
+                    aliasNames.push(index.attribute);
+                }
+
+                return aliasNames;
+            }).then(function (aliasNames) {
                 // Build Alias
-                var alias = _buildAlias(params.set.attribute, params.set.value);
+                var alias = _buildAlias(aliasNames, params.set.value);
 
                 if (!alias) {
                     throw new Error('Invalid attribute or value.');
                 }
 
-                // Define update params
+                return alias;
+            }).then(function (alias) {
+                // Build expression and define update params
+                var expression = 'ADD ' + alias.map.names[0] + ' ' + alias.map.values[0];
+                //var expression = 'SET ' + alias.map.names[0] + ' = ' + alias.map.names[0] + ' + ' + alias.map.values[0];
+
+                // If index, append expression
+                if (alias.map.names[1]) {
+                    expression += ', ' + alias.map.names[1] + ' ' + alias.map.values[0];
+                    //expression += ', ' + alias.map.names[1] + ' = ' + alias.map.names[1] + ' + ' + alias.map.values[0];
+                }
+
                 return {
                     alias: alias.data,
-                    set: 'ADD ' + alias.map.names[0] + ' ' + alias.map.values[0],
+                    set: expression,
                     where: {
                         _namespace: params.namespace,
                         _key: params.where
@@ -353,7 +427,7 @@ function __construct() {
                 return updateParams;
             }).then(function (updateParams) {
                 // Sync Data
-                return base.update(updateParams).then(function(){
+                return base.update(updateParams).then(function () {
                     return true;
                 });
             });

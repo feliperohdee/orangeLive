@@ -1,7 +1,22 @@
 // # App
 //var instance = orangeLive('*').select('name, height, age').useIndex('height');
-var instance = orangeLive('*').select('name').last(4).on('load', function (data) {
+var instance = orangeLive('*/-ci56s0mnc0004bmnrg8totgzf').on('load', function (data, pagination) {
     console.log('instance 1', data);
+
+    if (pagination && pagination.prev) {
+        $('#prev').removeAttr('disabled');
+        $('#prev').unbind().bind('click', pagination.prev);
+    } else {
+        $('#prev').attr('disabled', 'disabled');
+    }
+
+    if (pagination && pagination.next) {
+        $('#next').removeAttr('disabled');
+        $('#next').unbind().bind('click', pagination.next);
+    } else {
+        $('#next').attr('disabled', 'disabled');
+    }
+
     updateView(data);
 }).on('add', function (data) {
     console.log('On add Event', data);
@@ -29,35 +44,48 @@ var instance2 = orangeLive('*/-ci56s0mnc0004bmnrg8totgzf').on('load', function (
     console.log('instance 2', data);
 });
 
+setTimeout(function () {
+    instance2.pushList({
+        name: 'felipe',
+        age: getRandomInt(10, 90)
+    }, 'array');
+}, 1000);
+
 function add() {
     instance.insert({
+        key: '-ci56s0mnc0004bmnrg8totgzf',
         name: 'Rohde Test',
         height: getRandomInt(10, 90),
-        age: getRandomInt(105, 115),
-        address: 'floripa'
+        age: getRandomInt(105, 110),
+        address: 'floripa',
+        array: [{
+                name: 'felipe',
+                age: getRandomInt(10, 90)
+            }]
     });
 }
 
-function increment(){
-    instance2.increment(1);
-}
-
-function decrement(){
-    instance2.decrement(1);
-}
-
 function push() {
-    instance2.push({
+    instance.push({
+        key: '-ci56s0mnc0004bmnrg8totgzf',
         name: 'Rohde Test',
-        height: getRandomInt(0, 90),
+        height: getRandomInt(10, 90),
         age: getRandomInt(105, 110)
     });
 }
 
+function increment() {
+    instance2.increment(1, 'age');
+}
+
+function decrement() {
+    instance2.decrement(1, 'age');
+}
+
 function update() {
     instance2.update({
-        //name: 'Rohde Test',
-        height: getRandomInt(0, 90),
+        name: 'Rohde Test',
+        height: getRandomInt(10, 90),
         age: getRandomInt(105, 110),
         address: 'floripa'
     }, 1);

@@ -25,8 +25,7 @@ function updateView(data) {
     }
 }
 
-
-var instance2 = orangeLive('*/-ci547pll0000062nr1va9ndcy/rohde').on('load', function (data) {
+var instance2 = orangeLive('*/-ci56s0mnc0004bmnrg8totgzf').on('load', function (data) {
     console.log('instance 2', data);
 });
 

@@ -5,7 +5,12 @@ var dynamodb = require('../libs').dynamodb;
 _createTables();
 _createSchema();
 
-module.exports = dynamodb;
+module.exports = {
+    insert: insert,
+    item: item,
+    query: query,
+    update: update
+};
 
 /*=======================================*/
 
@@ -62,4 +67,80 @@ function _createTables() {
     }).then(function () {
         return returnData;
     });
+}
+
+// # Insert
+function insert(params) {
+
+    var insert = dynamodb.insert.item('tblLive1');
+
+    if (params.set)
+        insert.set(params.set);
+
+    return insert.exec();
+}
+
+// # Item
+function item(params) {
+    var item = dynamodb.get.item('tblLive1');
+
+    if (params.alias)
+        item.alias(params.alias);
+
+    if (params.select)
+        item.select(params.select);
+
+    if (params.where)
+        item.where(params.where);
+
+    return item.exec();
+}
+
+// # Query
+function query(params) {
+    //
+    var query = dynamodb.get.queryItems('tblLive1');
+
+    if (params.alias)
+        query.alias(params.alias);
+
+    if (params.consistent)
+        query.consistent();
+
+    if (params.desc)
+        query.desc();
+
+    if (params.indexedBy)
+        query.indexedBy(params.indexedBy);
+
+    if (params.limit)
+        query.limit(params.limit);
+
+    if (params.select)
+        query.select(params.select);
+
+    if (params.startAt)
+        query.startAt(params.startAt);
+
+    if (params.where)
+        query.where(params.where);
+
+    return query.exec();
+}
+
+// # Update
+function update(params) {
+
+    var update = dynamodb.update.item('tblLive1');
+
+    if (params.alias)
+        update.alias(params.alias);
+
+    if (params.set)
+        update.set(params.set);
+
+    if (params.where)
+        update.where(params.where);
+
+    return update.exec();
 }

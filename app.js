@@ -16,7 +16,7 @@ var middleware = require('./middleware');
 
 /*===========================*/
 
-var applicationModel = require('./models/application');
+var liveModel = require('./models/live');
 
 /*===========================*/
 

@@ -63,7 +63,27 @@ function orangeLive(address) {
             switch (operation) {
                 case 'delete':
                     break;
-                case 'query':
+                case 'broadcast:insert':
+                    _dispatchEvent('collection', 'add', result);
+                    _dispatchEvent('collection', 'fetch:add', result);
+                    break;
+                case 'broadcast:update':
+                    _dispatchEvent('collection', 'change', result);
+                    _dispatchEvent('collection', 'fetch:change', result);
+                    _dispatchEvent('item', 'change', result);
+                    _dispatchEvent('item', 'fetch:change', result);
+                    break;
+                case 'broadcast:updateAtomic':
+                    _dispatchEvent('collection', 'fetch:atomic', result);
+                    _dispatchEvent('item', 'fetch:atomic', result);
+                    break;
+                case 'sync:item':
+                    // Update Data set
+                    iInstance.setDataSet(result.data);
+
+                    _dispatchEvent('item', 'load', iInstance.getDataSet());
+                    break;
+                case 'sync:query':
                     // Update Data set
                     cInstance.setDataSet(result.data);
 
@@ -93,26 +113,6 @@ function orangeLive(address) {
                             next: pagination.isNext ? cInstance.pageNext : false
                         }
                     });
-                    break;
-                case 'insert':
-                    _dispatchEvent('collection', 'add', result);
-                    _dispatchEvent('collection', 'fetch:add', result);
-                    break;
-                case 'item':
-                    // Update Data set
-                    iInstance.setDataSet(result.data);
-
-                    _dispatchEvent('item', 'load', iInstance.getDataSet());
-                    break;
-                case 'update':
-                    _dispatchEvent('collection', 'change', result);
-                    _dispatchEvent('collection', 'fetch:change', result);
-                    _dispatchEvent('item', 'change', result);
-                    _dispatchEvent('item', 'fetch:change', result);
-                    break;
-                case 'updateAtomic':
-                    _dispatchEvent('collection', 'fetch:atomic', result);
-                    _dispatchEvent('item', 'fetch:atomic', result);
                     break;
                 default:
                     console.log(operation, result);
@@ -208,7 +208,7 @@ function orangeLive(address) {
             isNext: false,
             isPrev: false
         }
-        var _query = false;
+        var _where = false;
         var _select = false;
         var _startAt = false;
 
@@ -235,9 +235,9 @@ function orangeLive(address) {
                 desc: _desc || false,
                 index: _index || false,
                 limit: _limit || false,
-                query: _query || false,
                 select: _select || false,
-                startAt: _startAt || false
+                startAt: _startAt || false,
+                where: _where || false
             });
         }
 
@@ -254,9 +254,9 @@ function orangeLive(address) {
         function _sortAndLimit(data) {
             // Sort
             data = _.sortBy(data, _index || 'key');
-            
+
             // If desc, reverse array
-            if(_desc){
+            if (_desc) {
                 data = data.reverse();
             }
 
@@ -270,18 +270,18 @@ function orangeLive(address) {
 
         // # Test Conditions
         function _testConditions(data) {
-            // If no query, always pass
-            if (!_query) {
+            // If no where, always pass
+            if (!_where) {
                 return true;
             }
 
             var result = false;
-            var testCase = _query[0];
-            var testValue = _query[1];
+            var testCase = _where[0];
+            var testValue = _where[1];
             var testAttr = _index || 'key';
 
-            if (_query[2]) {
-                testValue = [_query[1], _query[2]];
+            if (_where[2]) {
+                testValue = [_where[1], _where[2]];
             }
 
             switch (testCase) {
@@ -346,7 +346,7 @@ function orangeLive(address) {
             };
 
             /*--------------------------------------*/
-            
+
             // ## Asc
             function asc() {
                 _desc = false;
@@ -356,11 +356,11 @@ function orangeLive(address) {
 
             // ## Between
             function between(valueLow, valueHigh) {
-                _query = ['~', valueLow, valueHigh];
+                _where = ['~', valueLow, valueHigh];
 
                 return this;
             }
-            
+
             // ## Desc
             function desc() {
                 _desc = true;
@@ -370,22 +370,22 @@ function orangeLive(address) {
 
             // ## Equals
             function equals(value) {
-                _query = ['=', value];
+                _where = ['=', value];
 
                 return this;
             }
-            
+
             // ## First, ALIAS for Limit and Ascendent
-            function first(value){
+            function first(value) {
                 limit(value);
                 asc();
-                
+
                 return this;
             }
 
             // ## Greatest Than
             function greatestThan(value) {
-                _query = ['>=', value];
+                _where = ['>=', value];
 
                 return this;
             }
@@ -396,18 +396,18 @@ function orangeLive(address) {
 
                 return this;
             }
-            
+
             // ## Last, ALIAS for Limit and Descendent
-            function last(value){
+            function last(value) {
                 limit(value);
                 desc();
-                
+
                 return this;
             }
-            
+
             // ## Less Than
             function lessThan(value) {
-                _query = ['<=', value];
+                _where = ['<=', value];
 
                 return this;
             }
@@ -455,7 +455,7 @@ function orangeLive(address) {
 
             // ## Starts With
             function startsWith(value) {
-                _query = ['^', value];
+                _where = ['^', value];
 
                 return this;
             }
@@ -627,7 +627,7 @@ function orangeLive(address) {
             _request('item', {
                 consistent: consistent || false,
                 select: _select || false,
-                query: _where || false
+                where: _where || false
             });
         }
 

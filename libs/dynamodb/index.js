@@ -10,7 +10,6 @@ module.exports = function (params) {
         del: require('./del'),
         get: require('./get'),
         insert: require('./insert'),
-        live: require('./live'),
         schema: require('./schema'),
         table: require('./table'),
         update: require('./update')

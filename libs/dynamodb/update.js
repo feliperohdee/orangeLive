@@ -85,10 +85,8 @@ function item(table) {
     function set(data) {
         //
         if (typeof data === 'string') {
-            // Set update data
-            updateData = data;
-
-            params.UpdateExpression = updateData;
+            // Set expression
+            params.UpdateExpression = data;
             return this;
         }
 

@@ -1,5 +1,6 @@
 // # DynamoDb Live
 var _ = require('lodash');
+var Promise = require('bluebird');
 var dynamoGet = require('./get');
 var dynamoInsert = require('./insert');
 var dynamoUpdate = require('./update');
@@ -26,6 +27,7 @@ function __construct() {
 function orangeLive(params, socket) {
     //
     return{
+        atomicUpdate: atomicUpdate,
         insert: insert,
         item: item,
         join: join,
@@ -35,6 +37,37 @@ function orangeLive(params, socket) {
     };
 
     /*----------------------------*/
+
+    // # Atomic Update
+    function atomicUpdate() {
+        //
+        var updateAttrs = {};
+
+        Promise.try(function () {
+            // Build Alias
+            var alias = _buildAlias(params.set.attribute, params.set.value);
+            
+            if(!alias){
+                throw new Error('Invalid attribute or value.');
+            }
+
+            updateAttrs = {
+                alias: alias.data,
+                set: 'SET ' + alias.map.names[0] + ' = ' + alias.map.names[0] + ' + ' + alias.map.values[0],
+                where: {
+                    _namespace: params.namespace,
+                    _key: params.where
+                }
+            };
+
+            // Do update sync and response status
+            return _syncUpdate(updateAttrs);
+        }).then(function (result) {
+            _response().me().operation('syncSuccess:atomicUpdate').data(result);
+        }).catch(function (err) {
+            _response().me().operation('syncError:atomicUpdate').error(err);
+        });
+    }
 
     // # Item Operation
     function item() {
@@ -56,13 +89,13 @@ function orangeLive(params, socket) {
 
         // Encode Indexes
         if (params.indexes) {
-            params.data = _encodeIndexSet(params.indexes, params.data);
+            params.set = _encodeIndexSet(params.indexes, params.set);
         }
 
         var insertAttrs = {
-            set: _.extend(params.data, {
+            set: _.extend(params.set, {
                 _namespace: params.namespace,
-                _key: params.data.key || '-' + cuid(), // Generate new key if no one provided
+                _key: params.set.key || '-' + cuid(), // Generate new key if no one provided
                 _pi: params.priority || 0 // Priority Index
             })
         };
@@ -94,6 +127,50 @@ function orangeLive(params, socket) {
         }
     }
 
+    // # Push Attribute Operation
+    function pushAtribute() {
+        //
+        var params = {
+            where: ['array'],
+            set: {a: 'b'}
+        };
+
+        var updateAttrs = {};
+
+        // Create an alias
+        updateAttrs.alias = _buildAlias(params.where);
+        updateAttrs.set = 'SET #' + params.where + ' list_append(#' + params.where + ', ' + params.set + ')';
+
+        console.log(JSON.stringify(updateAttrs));
+
+
+        //return _syncUpdate(updateAttrs);
+
+        /*
+         setTimeout(function () {
+         _syncUpdate({
+         where: {
+         _namespace: '*',
+         _key: '-ci547pll0000062nr1va9ndcy'
+         },
+         alias: {
+         names: {
+         array: 'array'
+         },
+         values: {
+         1: -10
+         }
+         },
+         set: 'SET #array = #array + :1'
+         }).then(function (r) {
+         console.log(r);
+         }).catch(function (r) {
+         console.log(r.message);
+         });
+         }, 500);
+         */
+    }
+
     // # Query Operation
     function query() {
         // Define query or item operation
@@ -117,23 +194,23 @@ function orangeLive(params, socket) {
     function update() {
 
         if (!params.where) {
-            _response.me().operation('validationError').error(new Error('No valid keys provided. Please specify primary key field.'));
+            _response().me().operation('validationError').error(new Error('No valid keys provided. Please specify primary key field.'));
             return;
         }
 
         // Encode Indexes
         if (params.indexes) {
-            params.data = _encodeIndexSet(params.indexes, params.data);
+            params.set = _encodeIndexSet(params.indexes, params.set);
         }
 
         // Append priority if exists
         if (params.priority) {
-            params.data._pi = params.priority;
+            params.set._pi = params.priority;
         }
 
         // ## Update Operation
         var updateAttrs = {
-            set: params.data,
+            set: params.set,
             where: {
                 _namespace: params.namespace,
                 _key: params.where
@@ -287,30 +364,50 @@ function orangeLive(params, socket) {
         }
     }
 
-    // # Build Alias
+    // # Build
     function _buildAlias(names, values) {
         //
-        var result = {};
+        var result = {
+            data: {},
+            map: {}
+        };
 
-        if (names) {
-            //
-            result.names = {};
-            _.each(names, function (value) {
-                // Trim before handle
-                value = value.trim();
-
-                result.names[value] = value;
-            });
+        if (!names) {
+            return false;
         }
 
+        // Names
+        result.data.names = {};
+        result.map.names = [];
+
+        if (!_.isArray(names)) {
+            names = [names];
+        }
+
+        _.each(names, function (value, index) {
+            var id = cuid();
+            // Set name
+            result.data.names[id] = value.trim();
+            // Add on map
+            result.map.names.push('#' + id);
+        });
+
+        // Valus
         if (values) {
             //
-            result.values = {};
-            _.each(values, function (value) {
-                // Trim before handle
-                value = value.trim();
+            result.data.values = {};
+            result.map.values = [];
 
-                result.values[value] = value;
+            if (!_.isArray(values)) {
+                values = [values];
+            }
+
+            _.each(values, function (value) {
+                var id = cuid();
+                // Set value
+                result.data.values[id] = value;
+                // Add on map
+                result.map.values.push(':' + id);
             });
         }
 
@@ -339,12 +436,11 @@ function orangeLive(params, socket) {
             // Always select _key
             selectArray.push('_key');
 
-            // Create Alias
-            itemAttrs.alias = _buildAlias(selectArray);
+            // Build Alias
+            var alias = _buildAlias(selectArray);
 
-            itemAttrs.select = _.map(selectArray, function (value) {
-                return '#' + value.trim();
-            }).join();
+            itemAttrs.alias = alias.data;
+            itemAttrs.select = alias.map.names.join();
         }
 
         return _syncItem(itemAttrs);
@@ -375,12 +471,11 @@ function orangeLive(params, socket) {
             // Always select _key
             selectArray.push('_key');
 
-            // Create Alias
-            queryAttrs.alias = _buildAlias(selectArray);
+            // Build Alias
+            var alias = _buildAlias(selectArray);
 
-            queryAttrs.select = _.map(selectArray, function (value) {
-                return '#' + value.trim();
-            }).join();
+            queryAttrs.alias = alias.data;
+            queryAttrs.select = alias.map.names.join();
         }
 
         // Indexes
@@ -468,7 +563,11 @@ function orangeLive(params, socket) {
     // # Sync Update
     // - Execute dynamo update
     function _syncUpdate(attrs) {
+
         var update = dynamoUpdate.item('tblLive1');
+
+        if (attrs.alias)
+            update.alias(attrs.alias);
 
         if (attrs.set)
             update.set(attrs.set);

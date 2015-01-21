@@ -12,7 +12,7 @@ function orangeLive(address) {
     var socket = new io({
         forceNew: true
     });
-    
+
     var indexes = {
         string: ['name'],
         number: ['height', 'age']
@@ -39,11 +39,9 @@ function orangeLive(address) {
             // Return collection instance
             return cInstance.api();
             // Return item instance
-        } else if (!addressParams.attribute) {
-            return iInstance.api().key(addressParams.key);
         } else {
             // Return item instance with select attributes
-            return iInstance.api().key(addressParams.key).select(addressParams.attribute);
+            return iInstance.api();
         }
     }
 
@@ -108,9 +106,12 @@ function orangeLive(address) {
                     _dispatchEvent('collection', 'change', result);
                     _dispatchEvent('collection', 'fetch:change', result);
                     _dispatchEvent('item', 'change', result);
+                    _dispatchEvent('item', 'fetch:change', result);
                     break;
                 case 'delete':
                     break;
+                default:
+                    console.log(operation, result);
             }
         });
 
@@ -150,6 +151,12 @@ function orangeLive(address) {
                     // test if item changed is item displayed, than callback
                     if (iInstance.hasSameKey(result)) {
                         callback(result);
+                    }
+                    break;
+                case 'item.fetch:change':
+                    // test if item changed is item displayed, than callback
+                    if (iInstance.hasSameKey(result)) {
+                        iInstance.updateItem(result, callback);
                     }
                     break;
                 case 'item.load':
@@ -219,10 +226,10 @@ function orangeLive(address) {
         }
 
         // # Insert
-        function _insert(data, priority) {
+        function _insert(set, priority) {
             //
             _request('insert', {
-                data: data,
+                set: set,
                 priority: priority
             });
         }
@@ -346,8 +353,8 @@ function orangeLive(address) {
             }
 
             // ## Insert
-            function insert(data, priority) {
-                _insert(data, priority);
+            function insert(set, priority) {
+                _insert(set, priority);
 
                 return this;
             }
@@ -370,11 +377,11 @@ function orangeLive(address) {
             }
 
             // ## Push
-            function push(data, priority) {
-                // Push create always create new key
-                delete data.key;
+            function push(set, priority) {
+                // Push always create new key, so delete it
+                delete set.key;
 
-                _insert(data, priority);
+                _insert(set, priority);
 
                 return this;
             }
@@ -526,15 +533,16 @@ function orangeLive(address) {
         //
         var _dataSet = [];
         var _events = {};
-        var _key = false;
-        var _select = false;
+        var _select = addressParams.attribute || false;
+        var _where = addressParams.key || false;
 
         return{
             api: api,
             hasSameKey: hasSameKey,
             getCallback: getCallback,
             getDataSet: getDataSet,
-            setDataSet: setDataSet
+            setDataSet: setDataSet,
+            updateItem: updateItem
         };
 
         /*--------------------------------------*/
@@ -544,16 +552,24 @@ function orangeLive(address) {
             _request('item', {
                 consistent: consistent || false,
                 select: _select || false,
-                query: _key || false
+                query: _where || false
             });
         }
 
+        // ## Atomic Update
+        function _atomicUpdate(set) {
+            _request('atomicUpdate', {
+                set: set,
+                where: _where || false
+            });
+        }
+        
         // ## Update
-        function _update(data, priority) {
+        function _update(set, priority) {
             _request('update', {
-                data: data,
+                set: set,
                 priority: priority,
-                where: _key || false
+                where: _where || false
             });
         }
 
@@ -563,14 +579,23 @@ function orangeLive(address) {
             setTimeout(_get, 150);
 
             return{
+                atomicUpdate: atomicUpdate,
                 on: on,
-                key: key,
                 push: push,
                 select: select,
                 update: update,
+                where: where
             };
 
             /*--------------------------------------*/
+            
+            // ## Atomic Update
+            function atomicUpdate(value, attribute){
+                _atomicUpdate({
+                    attribute: attribute,
+                    value: value
+                });
+            }
 
             // ## On
             function on(event, callback) {
@@ -578,30 +603,6 @@ function orangeLive(address) {
                 _request('join');
 
                 _events[event] = callback;
-
-                return this;
-            }
-
-            // ## Key
-            function key(key) {
-                _key = key;
-
-                return this;
-            }
-
-            // ## Push
-            function push(attribute, data) {
-                //
-                var value = {};
-                value[attribute] = _dataSet[attribute];
-
-                if (!_.isArray(value[attribute])) {
-                    value[attribute] = [];
-                }
-
-                value[attribute].push(data);
-
-                _update(value);
 
                 return this;
             }
@@ -614,8 +615,15 @@ function orangeLive(address) {
             }
 
             // # Update
-            function update(data, priority) {
-                _update(data, priority);
+            function update(set, priority) {
+                _update(set, priority);
+
+                return this;
+            }
+
+            // ## Where
+            function where(where) {
+                _where = where;
 
                 return this;
             }
@@ -632,13 +640,27 @@ function orangeLive(address) {
         }
 
         // ## Get Data
-        function getDataSet(data) {
+        function getDataSet() {
             return _dataSet;
         }
 
         // ## Set Data
         function setDataSet(data) {
             _dataSet = data;
+        }
+
+        // ## Update Item
+        function updateItem(data, callback) {
+            // If select, remove extras
+            if (_select) {
+                data = _removeNonSelected(data, _select);
+            }
+
+            // Update Item
+            _.extend(_dataSet, data);
+
+            //Callback
+            callback(_dataSet);
         }
     }
 }

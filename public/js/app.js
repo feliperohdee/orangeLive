@@ -1,6 +1,6 @@
 // # App
 //var instance = orangeLive('*').select('name, height, age').useIndex('height');
-var instance = orangeLive('*/-ci547pll0000062nr1va9ndcy').on('load', function (data) {
+var instance = orangeLive('*/-ci547pll0000062nr1va9ndcy/array').on('load', function (data) {
     console.log('instance 1', data);
     updateView(data);
 }).on('add', function (data) {
@@ -26,7 +26,7 @@ function updateView(data) {
 }
 
 
-var instance2 = orangeLive('*/-ci547pll0000062nr1va9ndcy').on('load', function (data) {
+var instance2 = orangeLive('*/-ci547pll0000062nr1va9ndcy/array').on('load', function (data) {
     console.log('instance 2', data);
 });
 

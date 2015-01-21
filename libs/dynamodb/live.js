@@ -46,8 +46,8 @@ function orangeLive(params, socket) {
         Promise.try(function () {
             // Build Alias
             var alias = _buildAlias(params.set.attribute, params.set.value);
-            
-            if(!alias){
+
+            if (!alias) {
                 throw new Error('Invalid attribute or value.');
             }
 
@@ -60,10 +60,15 @@ function orangeLive(params, socket) {
                 }
             };
 
+            // Immediate response
+            _response().all().operation('atomicUpdate').data(_normalizeReponseData(_.extend({
+                value: params.set.value
+            }, updateAttrs.where)));
+
             // Do update sync and response status
             return _syncUpdate(updateAttrs);
         }).then(function (result) {
-            _response().me().operation('syncSuccess:atomicUpdate').data(result);
+            _response().me().operation('syncSuccess:atomicUpdate');
         }).catch(function (err) {
             _response().me().operation('syncError:atomicUpdate').error(err);
         });
@@ -125,50 +130,6 @@ function orangeLive(params, socket) {
         if (params.namespace !== socket.id) {
             socket.leave(params.namespace);
         }
-    }
-
-    // # Push Attribute Operation
-    function pushAtribute() {
-        //
-        var params = {
-            where: ['array'],
-            set: {a: 'b'}
-        };
-
-        var updateAttrs = {};
-
-        // Create an alias
-        updateAttrs.alias = _buildAlias(params.where);
-        updateAttrs.set = 'SET #' + params.where + ' list_append(#' + params.where + ', ' + params.set + ')';
-
-        console.log(JSON.stringify(updateAttrs));
-
-
-        //return _syncUpdate(updateAttrs);
-
-        /*
-         setTimeout(function () {
-         _syncUpdate({
-         where: {
-         _namespace: '*',
-         _key: '-ci547pll0000062nr1va9ndcy'
-         },
-         alias: {
-         names: {
-         array: 'array'
-         },
-         values: {
-         1: -10
-         }
-         },
-         set: 'SET #array = #array + :1'
-         }).then(function (r) {
-         console.log(r);
-         }).catch(function (r) {
-         console.log(r.message);
-         });
-         }, 500);
-         */
     }
 
     // # Query Operation

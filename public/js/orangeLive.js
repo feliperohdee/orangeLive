@@ -581,7 +581,6 @@ function orangeLive(address) {
             return{
                 atomicUpdate: atomicUpdate,
                 on: on,
-                push: push,
                 select: select,
                 update: update,
                 where: where
@@ -592,7 +591,7 @@ function orangeLive(address) {
             // ## Atomic Update
             function atomicUpdate(value, attribute){
                 _atomicUpdate({
-                    attribute: attribute,
+                    attribute: attribute || addressParams.attribute,
                     value: value
                 });
             }

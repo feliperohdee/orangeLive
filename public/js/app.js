@@ -1,8 +1,8 @@
 // # App
 //var instance = orangeLive('*').select('name, height, age').useIndex('height');
-var instance = orangeLive('*/-ci56s0mnc0004bmnrg8totgzf').on('load', function (data, pagination) {
+var instance = orangeLive('*').last(4).useIndex('age').on('load', function (data, pagination) {
     console.log('instance 1', data);
-
+    
     if (pagination && pagination.prev) {
         $('#prev').removeAttr('disabled');
         $('#prev').unbind().bind('click', pagination.prev);
@@ -18,10 +18,8 @@ var instance = orangeLive('*/-ci56s0mnc0004bmnrg8totgzf').on('load', function (d
     }
 
     updateView(data);
-}).on('add', function (data) {
-    console.log('On add Event', data);
-}).on('change', function (data) {
-    console.log('On change Event', data);
+}).on('put', function (data) {
+    console.log('On put Event', data);
 }).on('fetch', function (data) {
     console.log('On fetch Event', data);
     updateView(data);
@@ -52,8 +50,8 @@ setTimeout(function () {
 }, 1000);
 
 function add() {
-    instance.insert({
-        key: '-ci56s0mnc0004bmnrg8totgzf',
+    instance.put({
+        //key: '-ci56s0mnc0004bmnrg8totgzf',
         name: 'Rohde Test',
         height: getRandomInt(10, 90),
         age: getRandomInt(105, 110),
@@ -62,15 +60,6 @@ function add() {
                 name: 'felipe',
                 age: getRandomInt(10, 90)
             }]
-    });
-}
-
-function push() {
-    instance.push({
-        key: '-ci56s0mnc0004bmnrg8totgzf',
-        name: 'Rohde Test',
-        height: getRandomInt(10, 90),
-        age: getRandomInt(105, 110)
     });
 }
 
@@ -83,7 +72,7 @@ function decrement() {
 }
 
 function update() {
-    instance2.update({
+    instance2.put({
         name: 'Rohde Test',
         height: getRandomInt(10, 90),
         age: getRandomInt(105, 110),

@@ -3,13 +3,17 @@ function orangeLive(address) {
     //
     'use strict';
 
+    var instance;
+    var isItem = false;
+    var isCollection = false;
+    
     var addressParams = {
         namespace: address.split('/')[0] || false,
         key: address.split('/')[1] || false,
         attribute: address.split('/')[2] || false
     };
 
-    var socket = new io({
+    var socket = io({
         forceNew: true
     });
 
@@ -18,26 +22,28 @@ function orangeLive(address) {
         number: ['height', 'age']
     };
 
-    var cInstance = collection();
-    var iInstance = item();
-
     return __construct();
 
     /*----------------------------*/
 
     // # Construct
     function __construct() {
+        //
+        if (!addressParams.key) {
+            // Create and return collection instance
+            instance = collection();
+            isCollection = true;
+        } else {
+            // Create and return item instance
+            instance = item();
+            isItem = true;
+        }
+        
         // Start sockets
         _bindSockets();
-
-        if (!addressParams.key) {
-            // Return collection instance
-            return cInstance.api();
-            // Return item instance
-        } else {
-            // Return item instance with select attributes
-            return iInstance.api();
-        }
+        
+        // Expose API
+        return instance.api();
     }
 
     // # Request
@@ -53,65 +59,65 @@ function orangeLive(address) {
 
     // ## Bind Sockets
     function _bindSockets() {
-        //
+        // ### Reponse Success
         socket.on('responseSuccess', function (operation, result) {
             switch (operation) {
-                case 'delete':
-                    break;
                 case 'broadcast:insert':
-                    _dispatchEvent('collection', 'add', result);
-                    _dispatchEvent('collection', 'fetch:add', result);
+                    // Update Collection Dataset
+                    if (isCollection) {
+                        instance.putDataSet(result);
+                        // Dispatch Events
+                        dispatchEvents(['put', 'fetch']);
+                    }
                     break;
                 case 'broadcast:update':
-                    _dispatchEvent('collection', 'change', result);
-                    _dispatchEvent('collection', 'fetch:change', result);
-                    _dispatchEvent('item', 'change', result);
-                    _dispatchEvent('item', 'fetch:change', result);
+                    if (isCollection) {
+                        // Update Collection Dataset
+                        instance.putDataSet(result);
+                        // Dispatch Events
+                        dispatchEvents(['put', 'fetch']);
+                    } else if (isItem && instance.isOwn(result)) {
+                        // Update Item Dataset
+                        instance.putDataset(result);
+                        // Dispatch Events
+                        dispatchEvents(['put', 'fetch']);
+                    }
                     break;
-                case 'broadcast:updateAtomic':
-                    _dispatchEvent('collection', 'fetch:atomic', result);
-                    _dispatchEvent('item', 'fetch:atomic', result);
-                    break;
+                case 'broadcast:atomicUpdate':
                 case 'broadcast:pushList':
-                    _dispatchEvent('collection', 'fetch:pushList', result);
-                    _dispatchEvent('item', 'fetch:pushList', result);
+                    // Get atomicUpdate or pushList
+                    var specialOperation = operation.split(':')[1];
+                    var value = instance.handleSpecialOperation(specialOperation, result);
+
+                    if (value) {
+                        if (isCollection) {
+                            // Update Collection Dataset
+                            instance.putDataSet(value);
+                            // Dispatch Events
+                            dispatchEvents(['fetch']);
+                        } else if (isItem && instance.isOwn(result)) {
+                            // Update Item Dataset
+                            instance.putDataset(value);
+                            // Dispatch Events
+                            dispatchEvents(['fetch']);
+                        }
+                    }
                     break;
                 case 'sync:item':
-                    // Update Data set
-                    iInstance.setDataSet(result.data);
-
-                    _dispatchEvent('item', 'load', iInstance.getDataSet());
+                    if (isItem) {
+                        // Load Data
+                        instance.load(result);
+                        // Dispatch Events
+                        dispatchEvents(['load']);
+                    }
                     break;
                 case 'sync:query':
-                    // Update Data set
-                    cInstance.setDataSet(result.data);
-
-                    // Feed pagination Data
-                    // Set startkeys for the next pagination page
-                    var pagination = cInstance.getPagination();
-                    var current = pagination.current;
-
-                    if (result.startKey) {
-                        pagination.keys[0] = null; // => required
-                        pagination.keys[current + 1] = result.startKey;
+                    if (isCollection) {
+                        // Load Data
+                        instance.load(result);
+                        // Dispatch Events
+                        dispatchEvents(['load']);
                     }
-
-                    // Enable / Disable Prev and Next
-                    var keysLength = pagination.keys.length - 1
-
-                    pagination.isPrev = (current <= 0) ? false : true;
-                    pagination.isNext = (current >= keysLength) ? false : true;
-
-                    // Update pagination data
-                    cInstance.setPagination(pagination);
-
-                    _dispatchEvent('collection', 'load', {
-                        data: cInstance.getDataSet(),
-                        pagination: {
-                            prev: pagination.isPrev ? cInstance.pagePrev : false,
-                            next: pagination.isNext ? cInstance.pageNext : false
-                        }
-                    });
                     break;
                 default:
                     console.log(operation, result);
@@ -125,76 +131,26 @@ function orangeLive(address) {
     }
 
     // ## Dispatch Event
-    function _dispatchEvent(type, event, result) {
+    function dispatchEvents(events) {
+        //
+        var dataSet = instance.getDataSet();
 
-        var callback;
+        _.each(events, function (event) {
+            // Get callback
+            var callback = instance.getCallback(event);
 
-        if (type === 'collection') {
-            callback = cInstance.getCallback(event);
-        } else if (type === 'item') {
-            callback = iInstance.getCallback(event);
-        }
+            if (callback) {
+                if (event === 'load' && isCollection) {
+                    // Collection throw dataset and pagination on load
+                    var pagination = instance.getPagination();
 
-        if (callback) {
-            switch (type + '.' + event) {
-                case 'collection.add':
-                case 'collection.change':
-                    callback(result);
-                    break;
-                case 'collection.fetch:add':
-                case 'collection.fetch:change':
-                    cInstance.updateCollection(result, callback);
-                    break;
-                case 'collection.fetch:atomic':
-                    var atomic = cInstance.handleSpecialOperations('atomic', result);
-
-                    if (atomic) {
-                        cInstance.updateCollection(atomic, callback);
-                    }
-                    break;
-                case 'collection.fetch:pushList':
-                    var pushed = cInstance.handleSpecialOperations('pushList', result);
-
-                    if (pushed) {
-                        cInstance.updateCollection(pushed, callback);
-                    }
-                    break;
-                case 'collection.load':
-                    callback(result.data, result.pagination);
-                    break;
-                case 'item.change':
-                    // test if item changed is item displayed, than callback
-                    if (iInstance.isOwnData(result)) {
-                        callback(result);
-                    }
-                    break;
-                case 'item.fetch:atomic':
-                    // test if item changed is item displayed and has atomicity, than callback
-                    var atomic = iInstance.handleSpecialOperations('atomic', result);
-
-                    if (iInstance.isOwnData(result) && atomic) {
-                        iInstance.updateItem(atomic, callback);
-                    }
-                    break;
-                case 'item.fetch:change':
-                    // test if item changed is item displayed, than callback
-                    if (iInstance.isOwnData(result)) {
-                        iInstance.updateItem(result, callback);
-                    }
-                    break;
-                case 'item.fetch:pushList':
-                    // test if item changed is item displayed and has list, than callback
-                    var pushed = iInstance.handleSpecialOperations('pushList', result);
-
-                    if (iInstance.isOwnData(result) && pushed) {
-                        iInstance.updateItem(pushed, callback);
-                    }
-                    break;
-                case 'item.load':
-                    callback(result);
-                    break;
+                    callback(dataSet, pagination);
+                } else {
+                    // Otherwise throw just dataset
+                    callback(dataSet);
+                }
             }
-        }
+        });
     }
 
     // # Remove Non Selected
@@ -232,15 +188,12 @@ function orangeLive(address) {
 
         return{
             api: api,
+            load: load,
             getCallback: getCallback,
             getDataSet: getDataSet,
             getPagination: getPagination,
-            handleSpecialOperations: handleSpecialOperations,
-            pageNext: pageNext,
-            pagePrev: pagePrev,
-            setDataSet: setDataSet,
-            setPagination: setPagination,
-            updateCollection: updateCollection
+            handleSpecialOperation: handleSpecialOperation,
+            putDataSet: putDataSet
         };
 
         /*--------------------------------------*/
@@ -265,6 +218,40 @@ function orangeLive(address) {
                 set: set,
                 priority: priority
             });
+        }
+
+        // ## Page Next
+        function _pageNext() {
+            //
+            if (_pagination.isNext) {
+                var keysLength = _pagination.keys.length - 1;
+
+                if (++_pagination.current >= keysLength) {
+                    _pagination.current = keysLength;
+                }
+
+                // Define Start At
+                _startAt = _pagination.keys[_pagination.current];
+
+                // Get again
+                _get();
+            }
+        }
+
+        // ## Page Prev
+        function _pagePrev() {
+            //
+            if (_pagination.isPrev) {
+                if (--_pagination.current <= 0) {
+                    _pagination.current = 0;
+                }
+
+                // Define Start At
+                _startAt = _pagination.keys[_pagination.current];
+
+                // Get again
+                _get();
+            }
         }
 
         // ## Sort and Limit
@@ -350,12 +337,11 @@ function orangeLive(address) {
                 equals: equals,
                 first: first,
                 greatestThan: greatestThan,
-                insert: insert,
                 last: last,
                 lessThan: lessThan,
                 limit: limit,
                 on: on,
-                push: push,
+                put: put,
                 select: select,
                 startAt: startAt,
                 startsWith: startsWith,
@@ -407,13 +393,6 @@ function orangeLive(address) {
                 return this;
             }
 
-            // ## Insert
-            function insert(set, priority) {
-                _insert(set, priority);
-
-                return this;
-            }
-
             // ## Last, ALIAS for Limit and Descendent
             function last(value) {
                 limit(value);
@@ -446,11 +425,8 @@ function orangeLive(address) {
                 return this;
             }
 
-            // ## Push
-            function push(set, priority) {
-                // Push always create new key, so delete it
-                delete set.key;
-
+            // ## Put
+            function put(set, priority) {
                 _insert(set, priority);
 
                 return this;
@@ -485,23 +461,46 @@ function orangeLive(address) {
             }
         }
 
-        // ## Get Callback
-        function getCallback(event) {
-            return _events[event.split(':')[0]]; // Explode second rule if exists
+        // ## Load
+        function load(collection) {
+            _dataSet = collection.data;
+
+            // Feed pagination Data
+            // Set startkeys for the next pagination page 
+            var current = _pagination.current;
+
+            if (collection.startKey) {
+                _pagination.keys[0] = null; // => required
+                _pagination.keys[current + 1] = collection.startKey;
+            }
+
+            // Enable / Disable Prev and Next
+            var keysLength = _pagination.keys.length - 1;
+
+            _pagination.isPrev = (current <= 0) ? false : true;
+            _pagination.isNext = (current >= keysLength) ? false : true;
         }
 
-        // ## Get Data
+        // ## Get Callback
+        function getCallback(event) {
+            return _events[event];
+        }
+
+        // ## Get Dataset
         function getDataSet() {
             return _dataSet;
         }
 
         // ## Get Pagination
         function getPagination() {
-            return _pagination;
+            return {
+                next: _pagination.isNext ? _pageNext : false,
+                prev: _pagination.isPrev ? _pagePrev : false
+            };
         }
 
         // # Handle special operations like, atomic or push list operations
-        function handleSpecialOperations(operation, data) {
+        function handleSpecialOperation(operation, data) {
             //
             var result = false;
 
@@ -519,7 +518,7 @@ function orangeLive(address) {
                 var actualValue = _dataSet[dataIndex][data.attribute];
 
                 switch (operation) {
-                    case 'atomic':
+                    case 'atomicUpdate':
                         result[data.attribute] = parseInt(actualValue) + parseInt(data.value);
                         break
                     case 'pushList':
@@ -531,52 +530,8 @@ function orangeLive(address) {
             return result;
         }
 
-        // ## Page Next
-        function pageNext() {
-            //
-            if (_pagination.isNext) {
-                var keysLength = _pagination.keys.length - 1;
-
-                if (++_pagination.current >= keysLength) {
-                    _pagination.current = keysLength;
-                }
-
-                // Define Start At
-                _startAt = _pagination.keys[_pagination.current];
-
-                // Get again
-                _get();
-            }
-        }
-
-        // ## Page Prev
-        function pagePrev() {
-            //
-            if (_pagination.isPrev) {
-                if (--_pagination.current <= 0) {
-                    _pagination.current = 0;
-                }
-
-                // Define Start At
-                _startAt = _pagination.keys[_pagination.current];
-
-                // Get again
-                _get();
-            }
-        }
-
-        // ## Set Data
-        function setDataSet(data) {
-            _dataSet = data;
-        }
-
-        // ## Set Pagination
-        function setPagination(data) {
-            _.extend(_pagination, data);
-        }
-
-        // ## Update Collection
-        function updateCollection(data, callback) {
+        // ## Put Dataset
+        function putDataSet(data) {
             // If select, remove extras
             if (_select) {
                 data = _removeNonSelected(data, _select);
@@ -603,9 +558,6 @@ function orangeLive(address) {
                     _dataSet.splice(dataIndex, 1);
                 }
             }
-
-            //Callback
-            callback(_dataSet);
         }
     }
 
@@ -619,29 +571,40 @@ function orangeLive(address) {
 
         return{
             api: api,
+            load: load,
             getCallback: getCallback,
             getDataSet: getDataSet,
-            handleSpecialOperations: handleSpecialOperations,
-            isOwnData: isOwnData,
-            setDataSet: setDataSet,
-            updateItem: updateItem
+            handleSpecialOperation: handleSpecialOperation,
+            isOwn: isOwn,
+            putDataset: putDataset
         };
 
         /*--------------------------------------*/
+
+        // ## Atomic Update
+        function _atomicUpdate(value, attribute) {
+            // If no attribute, try get from address params
+            attribute = attribute || addressParams.attribute;
+
+            // test if is number
+            if (_.isNumber(_dataSet[attribute])) {
+                _request('atomicUpdate', {
+                    set: {
+                        attribute: attribute,
+                        value: value
+                    },
+                    where: _where || false
+                });
+            } else {
+                console.error('You can\'t do atomic operations in non NUMBER attribute.');
+            }
+        }
 
         // ## Get
         function _get(consistent) {
             _request('item', {
                 consistent: consistent || false,
                 select: _select || false,
-                where: _where || false
-            });
-        }
-
-        // ## Atomic Update
-        function _updateAtomic(set) {
-            _request('updateAtomic', {
-                set: set,
                 where: _where || false
             });
         }
@@ -674,21 +637,20 @@ function orangeLive(address) {
                 pushList: pushList,
                 on: on,
                 select: select,
-                update: update,
-                updateAtomic: updateAtomic,
+                put: put,
                 where: where
             };
 
             /*--------------------------------------*/
 
-            // ## Decrement, ALIAS for -updateAtomic
+            // ## Decrement, ALIAS for -atomicUpdate
             function decrement(value, attribute) {
-                updateAtomic(-Math.abs(value || 1), attribute);
+                _atomicUpdate(-Math.abs(value || 1), attribute);
             }
 
-            // ## Increment, ALIAS for +updateAtomic
+            // ## Increment, ALIAS for +atomicUpdate
             function increment(value, attribute) {
-                updateAtomic(Math.abs(value || 1), attribute);
+                _atomicUpdate(Math.abs(value || 1), attribute);
             }
 
             // ## Push List
@@ -724,27 +686,11 @@ function orangeLive(address) {
                 return this;
             }
 
-            // # Update
-            function update(set, priority) {
+            // # Put
+            function put(set, priority) {
                 _update(set, priority);
 
                 return this;
-            }
-
-            // ## Update Atomic
-            function updateAtomic(value, attribute) {
-                // If no attribute, try get from address params
-                attribute = attribute || addressParams.attribute;
-
-                // test if is number, or empty
-                if (_.isNumber(_dataSet[attribute])) {
-                    _updateAtomic({
-                        attribute: attribute,
-                        value: value
-                    });
-                } else {
-                    console.error('You can\'t do atomic operations in non NUMBER attribute.');
-                }
             }
 
             // ## Where
@@ -755,8 +701,13 @@ function orangeLive(address) {
             }
         }
 
+        // ## Load
+        function load(item) {
+            _dataSet = item.data;
+        }
+
         // # Handle special operations like, atomic or push list operations
-        function handleSpecialOperations(operation, data) {
+        function handleSpecialOperation(operation, data) {
             //
             var result = {
                 key: data.key
@@ -766,7 +717,7 @@ function orangeLive(address) {
             var actualValue = _dataSet[data.attribute];
 
             switch (operation) {
-                case 'atomic':
+                case 'atomicUpdate':
                     result[data.attribute] = parseInt(actualValue) + parseInt(data.value);
                     break
                 case 'pushList':
@@ -779,26 +730,21 @@ function orangeLive(address) {
 
         // ## Get Callback
         function getCallback(event) {
-            return _events[event.split(':')[0]]; // Explode second rule if exists
+            return _events[event];
         }
 
-        // ## Get Data
+        // ## Get Dataset
         function getDataSet() {
             return _dataSet;
         }
 
-        // ## Has Same Key
-        function isOwnData(data) {
+        // ## Is Own
+        function isOwn(data) {
             return _dataSet.key === data.key;
         }
 
-        // ## Set Data
-        function setDataSet(data) {
-            _dataSet = data;
-        }
-
-        // ## Update Item
-        function updateItem(data, callback) {
+        // ## Put Datset
+        function putDataset(data) {
             // If select, remove extras
             if (_select) {
                 data = _removeNonSelected(data, _select);
@@ -806,9 +752,6 @@ function orangeLive(address) {
 
             // Update Item
             _.extend(_dataSet, data);
-
-            //Callback
-            callback(_dataSet);
         }
     }
 }

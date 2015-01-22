@@ -141,10 +141,16 @@ function orangeLive(address) {
 
             if (callback) {
                 if (event === 'load' && isCollection) {
-                    // Collection throw dataset and pagination on load
+                    // Collection throw dataset, count, and pagination on load
+                    var count = instance.getCount();
                     var pagination = instance.getPagination();
 
-                    callback(dataSet, pagination);
+                    callback(dataSet, count, pagination);
+                } else if (event === 'put'){
+                    // Fetch last transaction
+                    var lastTransaction = instance.getLastTransaction();
+                    // When event is put, throw just data putted
+                    callback(lastTransaction);
                 } else {
                     // Otherwise throw just dataset
                     callback(dataSet);
@@ -171,10 +177,12 @@ function orangeLive(address) {
     // # Collection
     function collection() {
         //
+        var _count = 0;
         var _dataSet = [];
         var _desc = false;
         var _events = {};
         var _index = false;
+        var _lastTransaction = {};
         var _limit = false;
         var _pagination = {
             current: 0,
@@ -190,7 +198,9 @@ function orangeLive(address) {
             api: api,
             load: load,
             getCallback: getCallback,
+            getCount: getCount,
             getDataSet: getDataSet,
+            getLastTransaction: getLastTransaction,
             getPagination: getPagination,
             handleSpecialOperation: handleSpecialOperation,
             putDataSet: putDataSet
@@ -327,16 +337,17 @@ function orangeLive(address) {
         // ## API
         function api() {
 
-            // Get after 150 ms
+            // Get after 150 ms until all methods are computed
             setTimeout(_get, 150);
 
             return {
                 asc: asc,
                 between: between,
+                count: count,
                 desc: desc,
                 equals: equals,
                 first: first,
-                greatestThan: greatestThan,
+                greaterThan: greaterThan,
                 last: last,
                 lessThan: lessThan,
                 limit: limit,
@@ -363,6 +374,13 @@ function orangeLive(address) {
 
                 return this;
             }
+            
+            // # Count, ALIAS for Select = COUNT
+            function count(){
+                _select = 'COUNT';
+                
+                return this;
+            }
 
             // ## Desc
             function desc() {
@@ -386,8 +404,8 @@ function orangeLive(address) {
                 return this;
             }
 
-            // ## Greatest Than
-            function greatestThan(value) {
+            // ## Greater Than
+            function greaterThan(value) {
                 _where = ['>=', value];
 
                 return this;
@@ -464,6 +482,7 @@ function orangeLive(address) {
         // ## Load
         function load(collection) {
             _dataSet = collection.data;
+            _count = collection.count;
 
             // Feed pagination Data
             // Set startkeys for the next pagination page 
@@ -485,10 +504,20 @@ function orangeLive(address) {
         function getCallback(event) {
             return _events[event];
         }
+        
+        // ## Get Count
+        function getCount() {
+            return _count;
+        }
 
         // ## Get Dataset
         function getDataSet() {
             return _dataSet;
+        }
+        
+        // ## Get Last Transaction
+        function getLastTransaction(){
+            return _lastTransaction;
         }
 
         // ## Get Pagination
@@ -522,7 +551,7 @@ function orangeLive(address) {
                         result[data.attribute] = parseInt(actualValue) + parseInt(data.value);
                         break
                     case 'pushList':
-                        result[data.attribute] = actualValue.concat(data.value);
+                        result[data.attribute] = actualValue.concat(data.value).sort();
                         break;
                 }
             }
@@ -532,6 +561,9 @@ function orangeLive(address) {
 
         // ## Put Dataset
         function putDataSet(data) {
+            //Update Last Transacation
+            _lastTransaction = data;
+            
             // If select, remove extras
             if (_select) {
                 data = _removeNonSelected(data, _select);
@@ -566,6 +598,7 @@ function orangeLive(address) {
         //
         var _dataSet = [];
         var _events = {};
+        var _lastTransaction = {};
         var _select = addressParams.attribute || false;
         var _where = addressParams.key || false;
 
@@ -574,6 +607,7 @@ function orangeLive(address) {
             load: load,
             getCallback: getCallback,
             getDataSet: getDataSet,
+            getLastTransaction: getLastTransaction,
             handleSpecialOperation: handleSpecialOperation,
             isOwn: isOwn,
             putDataset: putDataset
@@ -628,7 +662,7 @@ function orangeLive(address) {
 
         // ## API
         function api() {
-            // Get after 150 ms
+            // Get after 150 ms until all methods are computed
             setTimeout(_get, 150);
 
             return{
@@ -721,7 +755,7 @@ function orangeLive(address) {
                     result[data.attribute] = parseInt(actualValue) + parseInt(data.value);
                     break
                 case 'pushList':
-                    result[data.attribute] = actualValue.concat(data.value);
+                    result[data.attribute] = actualValue.concat(data.value).sort();
                     break;
             }
 
@@ -737,6 +771,11 @@ function orangeLive(address) {
         function getDataSet() {
             return _dataSet;
         }
+        
+        // ## Get Last Transaction
+        function getLastTransaction(){
+            return _lastTransaction;
+        }
 
         // ## Is Own
         function isOwn(data) {
@@ -745,6 +784,9 @@ function orangeLive(address) {
 
         // ## Put Datset
         function putDataset(data) {
+            //Update Last Transacation
+            _lastTransaction = data;
+            
             // If select, remove extras
             if (_select) {
                 data = _removeNonSelected(data, _select);

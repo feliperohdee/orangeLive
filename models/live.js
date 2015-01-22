@@ -180,19 +180,19 @@ function __construct() {
                     }
                 };
             }).then(function (updateParams) {
-                // Broadcast Operation
-                socketResponse()
-                        .all()
-                        .operation('broadcast:pushList')
-                        .data(_normalizeReponseData(_.extend({
-                            attribute: params.set.attribute,
-                            value: params.set.value
-                        }, updateParams.where)));
-
-                return updateParams;
-            }).then(function (updateParams) {
                 // Sync Data
                 return base.update(updateParams).then(function (res) {
+
+                    // Broadcast Operation
+                    // - Just broadcast when operation is done because it can fail when data type doesn't match
+                    socketResponse()
+                            .all()
+                            .operation('broadcast:pushList')
+                            .data(_normalizeReponseData(_.extend({
+                                attribute: params.set.attribute,
+                                value: params.set.value
+                            }, updateParams.where)));
+
                     return true;
                 });
             });
@@ -221,14 +221,18 @@ function __construct() {
             }).then(function (queryParams) {
                 // Define Select
                 if (params.select) {
-                    // Split comma's, always include _key
-                    var selectArray = params.select.split(',').concat('_key');
+                    if (params.select === 'COUNT') {
+                        queryParams.select = 'COUNT';
+                    } else {
+                        // Split comma's, always include _key
+                        var selectArray = params.select.split(',').concat('_key');
 
-                    // Build Alias
-                    var alias = _buildAlias(selectArray);
+                        // Build Alias
+                        var alias = _buildAlias(selectArray);
 
-                    queryParams.alias = alias.data;
-                    queryParams.select = alias.map.names.join();
+                        queryParams.alias = alias.data;
+                        queryParams.select = alias.map.names.join();
+                    }
                 }
 
                 return queryParams;

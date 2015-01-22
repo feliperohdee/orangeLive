@@ -74,8 +74,14 @@ function insert(params) {
 
     var insert = dynamodb.insert.item('tblLive1');
 
+    if (params.alias)
+        insert.alias(params.alias);
+
     if (params.set)
         insert.set(params.set);
+
+    if (params.withCondition)
+        insert.withCondition(params.withCondition);
 
     return insert.exec();
 }

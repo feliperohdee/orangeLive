@@ -3,24 +3,25 @@ function orangeLive(address) {
     //
     'use strict';
 
-    var instance;
-    var isItem = false;
-    var isCollection = false;
-    
     var addressParams = {
-        namespace: address.split('/')[0] || false,
-        key: address.split('/')[1] || false,
-        attribute: address.split('/')[2] || false
+        key: address.split('/')[2] || false,
+        attribute: address.split('/')[3] || false
     };
-
-    var socket = io({
-        forceNew: true
-    });
 
     var indexes = {
         string: ['name'],
         number: ['height', 'age']
     };
+
+    var instance;
+    var isCollection = false;
+    var lastChangeTransaction = false;
+    var lastPutOperation = 0;
+    var putOperationInterval = 100;
+
+    var socket = io({
+        forceNew: true
+    });
 
     return __construct();
 
@@ -36,33 +37,23 @@ function orangeLive(address) {
         } else {
             // Create and return item instance
             instance = item();
-            isItem = true;
         }
-        
+
         // Start sockets
         _bindSockets();
-        
+
         // Expose API
         return instance.api();
     }
 
-    // # Request
-    function _request(operation, params) {
-        // Extend params with namespace and indexes
-        params = _.extend(params || {}, {
-            namespace: addressParams.namespace,
-            indexes: indexes
-        });
-
-        socket.emit('request', operation, params);
-    }
-
-    // ## Bind Sockets
+    // # Bind Sockets
     function _bindSockets() {
-        // ### Reponse Success
+        // # Reponse Success
         socket.on('responseSuccess', function (operation, result) {
             switch (operation) {
                 case 'broadcast:insert':
+                    // Set last change transaction
+                    lastChangeTransaction = result;
                     // Update Collection Dataset
                     if (isCollection) {
                         instance.putDataSet(result);
@@ -71,17 +62,12 @@ function orangeLive(address) {
                     }
                     break;
                 case 'broadcast:update':
-                    if (isCollection) {
-                        // Update Collection Dataset
-                        instance.putDataSet(result);
-                        // Dispatch Events
-                        dispatchEvents(['put', 'fetch']);
-                    } else if (isItem && instance.isOwn(result)) {
-                        // Update Item Dataset
-                        instance.putDataset(result);
-                        // Dispatch Events
-                        dispatchEvents(['put', 'fetch']);
-                    }
+                    // Set last change transaction
+                    lastChangeTransaction = result;
+                    // Update Collection/Item Dataset
+                    instance.putDataSet(result);
+                    // Dispatch Events
+                    dispatchEvents(['put', 'fetch']);
                     break;
                 case 'broadcast:atomicUpdate':
                 case 'broadcast:pushList':
@@ -90,88 +76,34 @@ function orangeLive(address) {
                     var value = instance.handleSpecialOperation(specialOperation, result);
 
                     if (value) {
-                        if (isCollection) {
-                            // Update Collection Dataset
-                            instance.putDataSet(value);
-                            // Dispatch Events
-                            dispatchEvents(['fetch']);
-                        } else if (isItem && instance.isOwn(result)) {
-                            // Update Item Dataset
-                            instance.putDataset(value);
-                            // Dispatch Events
-                            dispatchEvents(['fetch']);
-                        }
+                        // Set last change transaction
+                        lastChangeTransaction = value;
+                        // Update Collection/Item Dataset
+                        instance.putDataSet(value);
+                        // Dispatch Events
+                        dispatchEvents(['put', 'fetch']);
                     }
                     break;
                 case 'sync:item':
-                    if (isItem) {
-                        // Load Data
-                        instance.load(result);
-                        // Dispatch Events
-                        dispatchEvents(['load']);
-                    }
-                    break;
                 case 'sync:query':
-                    if (isCollection) {
-                        // Load Data
-                        instance.load(result);
-                        // Dispatch Events
-                        dispatchEvents(['load']);
+                    if (!isCollection) {
+                        // Set last change transaction to support item.isOwn() method
+                        lastChangeTransaction = result.data;
                     }
+                    // Load Data
+                    instance.load(result);
+                    // Dispatch Events
+                    dispatchEvents(['load']);
                     break;
                 default:
                     console.log(operation, result);
             }
         });
 
-        // ### Response Error
+        // # Response Error
         socket.on('responseError', function (event, err) {
             console.error(event, err);
         });
-    }
-
-    // ## Dispatch Event
-    function dispatchEvents(events) {
-        //
-        var dataSet = instance.getDataSet();
-
-        _.each(events, function (event) {
-            // Get callback
-            var callback = instance.getCallback(event);
-
-            if (callback) {
-                if (event === 'load' && isCollection) {
-                    // Collection throw dataset, count, and pagination on load
-                    var count = instance.getCount();
-                    var pagination = instance.getPagination();
-
-                    callback(dataSet, count, pagination);
-                } else if (event === 'put'){
-                    // Fetch last transaction
-                    var lastTransaction = instance.getLastTransaction();
-                    // When event is put, throw just data putted
-                    callback(lastTransaction);
-                } else {
-                    // Otherwise throw just dataset
-                    callback(dataSet);
-                }
-            }
-        });
-    }
-
-    // # Remove Non Selected
-    function _removeNonSelected(data, select) {
-        //
-        var result = {};
-
-        _.each(data, function (value, key) {
-            // If key belong to slect, and different of key
-            if (select.indexOf(key) >= 0 || key === 'key') {
-                result[key] = value;
-            }
-        });
-
-        return result;
     }
 
     // # Collection
@@ -182,14 +114,13 @@ function orangeLive(address) {
         var _desc = false;
         var _events = {};
         var _index = false;
-        var _lastTransaction = {};
         var _limit = false;
         var _pagination = {
             current: 0,
             keys: [],
             isNext: false,
             isPrev: false
-        }
+        };
         var _where = false;
         var _select = false;
         var _startAt = false;
@@ -200,7 +131,6 @@ function orangeLive(address) {
             getCallback: getCallback,
             getCount: getCount,
             getDataSet: getDataSet,
-            getLastTransaction: getLastTransaction,
             getPagination: getPagination,
             handleSpecialOperation: handleSpecialOperation,
             putDataSet: putDataSet
@@ -208,7 +138,156 @@ function orangeLive(address) {
 
         /*--------------------------------------*/
 
-        // ## Get
+        // # API
+        function api() {
+            // Get after 150 ms until all methods are computed
+            setTimeout(_get, 150);
+
+            return {
+                asc: asc,
+                between: between,
+                count: count,
+                desc: desc,
+                equals: equals,
+                first: first,
+                greaterThan: greaterThan,
+                last: last,
+                lessThan: lessThan,
+                limit: limit,
+                on: on,
+                put: put,
+                select: select,
+                startAt: startAt,
+                startsWith: startsWith,
+                useIndex: useIndex,
+            };
+
+            /*--------------------------------------*/
+
+            // # Asc
+            function asc() {
+                _desc = false;
+
+                return this;
+            }
+
+            // # Between
+            function between(valueLow, valueHigh) {
+                _where = ['~', valueLow, valueHigh];
+
+                return this;
+            }
+
+            // # Count, ALIAS for Select = COUNT
+            function count() {
+                _select = 'COUNT';
+
+                return this;
+            }
+
+            // # Desc
+            function desc() {
+                _desc = true;
+
+                return this;
+            }
+
+            // # Equals
+            function equals(value) {
+                _where = ['=', value];
+
+                return this;
+            }
+
+            // # First, ALIAS for Limit and Ascendent
+            function first(value) {
+                limit(value);
+                asc();
+
+                return this;
+            }
+
+            // # Greater Than
+            function greaterThan(value) {
+                _where = ['>=', value];
+
+                return this;
+            }
+
+            // # Last, ALIAS for Limit and Descendent
+            function last(value) {
+                limit(value);
+                desc();
+
+                return this;
+            }
+
+            // # Less Than
+            function lessThan(value) {
+                _where = ['<=', value];
+
+                return this;
+            }
+
+            // # Limit
+            function limit(limit) {
+                _limit = limit;
+
+                return this;
+            }
+
+            // # On
+            function on(event, callback) {
+                // Request join
+                _request('join');
+
+                _events[event] = callback;
+
+                return this;
+            }
+
+            // # Put {add or override}
+            function put(set, priority) {
+                _insert(set, priority);
+
+                return this;
+            }
+
+            // # Select
+            function select(select) {
+                _select = select;
+
+                return this;
+            }
+
+            // # Start At
+            function startAt(key) {
+                _startAt = key;
+
+                return this;
+            }
+
+            // # Starts With
+            function startsWith(value) {
+                _where = ['^', value];
+
+                return this;
+            }
+
+            // # Use Index
+            function useIndex(index) {
+                // Test if index is defined
+                if(indexes.string.indexOf(index) < 0 && indexes.number.indexOf(index) < 0){
+                    console.error('The index %s is not defined, the collection won\'t be ordenated or fetched by this index.', index);
+                }
+                
+                _index = index;
+
+                return this;
+            }
+        }
+
+        // # Get
         function _get(consistent) {
             _request('query', {
                 consistent: consistent || false,
@@ -221,6 +300,60 @@ function orangeLive(address) {
             });
         }
 
+        // # Get Callback {collection always return callback}
+        function getCallback(event) {
+            return _events[event];
+        }
+
+        // # Get Count
+        function getCount() {
+            return _count;
+        }
+
+        // # Get Dataset
+        function getDataSet() {
+            return _dataSet;
+        }
+
+        // # Get Pagination
+        function getPagination() {
+            return {
+                next: _pagination.isNext ? _pageNext : false,
+                prev: _pagination.isPrev ? _pagePrev : false
+            };
+        }
+
+        // # Handle special operations like, atomic or push list operations
+        function handleSpecialOperation(operation, data) {
+            //
+            var result = false;
+
+            // Fetch index from dataset
+            var dataIndex = _.findIndex(_dataSet, {key: data.key});
+
+            // Test if value belongs to actual dataset
+            if (dataIndex >= 0) {
+                //
+                result = {
+                    key: data.key
+                };
+
+                // Get current data
+                var currentData = _dataSet[dataIndex][data.attribute];
+
+                switch (operation) {
+                    case 'atomicUpdate':
+                        result[data.attribute] = parseInt(currentData) + parseInt(data.value);
+                        break
+                    case 'pushList':
+                        result[data.attribute] = _.uniq(currentData.concat(data.value).sort());
+                        break;
+                }
+            }
+
+            return result;
+        }
+
         // # Insert
         function _insert(set, priority) {
             //
@@ -230,7 +363,28 @@ function orangeLive(address) {
             });
         }
 
-        // ## Page Next
+        // # Load
+        function load(collection) {
+            _dataSet = collection.data;
+            _count = collection.count;
+
+            // Feed pagination Data
+            // Set startkeys for the next pagination page 
+            var current = _pagination.current;
+
+            if (collection.startKey) {
+                _pagination.keys[0] = null; // => required
+                _pagination.keys[current + 1] = collection.startKey;
+            }
+
+            // Enable / Disable Prev and Next
+            var keysLength = _pagination.keys.length - 1;
+
+            _pagination.isPrev = (current <= 0) ? false : true;
+            _pagination.isNext = (current >= keysLength) ? false : true;
+        }
+
+        // # Page Next
         function _pageNext() {
             //
             if (_pagination.isNext) {
@@ -248,7 +402,7 @@ function orangeLive(address) {
             }
         }
 
-        // ## Page Prev
+        // # Page Prev
         function _pagePrev() {
             //
             if (_pagination.isPrev) {
@@ -264,7 +418,38 @@ function orangeLive(address) {
             }
         }
 
-        // ## Sort and Limit
+        // # Put Dataset
+        function putDataSet(data) {
+            // If select, remove extras
+            if (_select) {
+                data = _removeNonSelected(data, _select);
+            }
+
+            // Get index
+            var dataIndex = _.findIndex(_dataSet, {key: data.key});
+
+            if (_testWhere(data)) {
+                // Test OK, update data if key already exists, otherwise push
+                // (collection.put might add or override)
+                if (dataIndex >= 0) {
+                    // Update Item
+                    _.extend(_dataSet[dataIndex], data);
+                } else {
+                    // Push Item
+                    _dataSet.push(data);
+                }
+
+                // Sort and Limit
+                _dataSet = _sortAndLimit(_dataSet);
+            } else {
+                // Test NOT OK, remove data if exists
+                if (dataIndex >= 0) {
+                    _dataSet.splice(dataIndex, 1);
+                }
+            }
+        }
+
+        // # Sort and Limit
         function _sortAndLimit(data) {
             // Sort
             data = _.sortBy(data, _index || 'key');
@@ -282,8 +467,8 @@ function orangeLive(address) {
             return data;
         }
 
-        // # Test Conditions
-        function _testConditions(data) {
+        // # Test Where Conditions
+        function _testWhere(data) {
             // If no where, always pass
             if (!_where) {
                 return true;
@@ -333,104 +518,96 @@ function orangeLive(address) {
 
             return result;
         }
+    }
 
-        // ## API
+    // # Dispatch Event
+    function dispatchEvents(events) {
+        //Fetch dataset
+        var dataSet = instance.getDataSet();
+
+        _.each(events, function (event) {
+            // Get callback
+            var callback = instance.getCallback(event);
+
+            if (callback) {
+                if (event === 'load' && isCollection) {
+                    // Collection throw dataset, count, and pagination on load
+                    var count = instance.getCount();
+                    var pagination = instance.getPagination();
+
+                    callback(dataSet, count, pagination);
+                } else if (event === 'put') {
+                    // When event is put, throw just last transaction data changed
+                    callback(lastChangeTransaction);
+                } else {
+                    // Otherwise throw just dataset
+                    callback(dataSet);
+                }
+            }
+        });
+    }
+
+    // # Item
+    function item() {
+        //
+        var _dataSet = [];
+        var _events = {};
+        var _select = addressParams.attribute || false;
+        var _where = addressParams.key || false;
+
+        return{
+            api: api,
+            load: load,
+            getCallback: getCallback,
+            getDataSet: getDataSet,
+            handleSpecialOperation: handleSpecialOperation,
+            putDataSet: putDataSet
+        };
+
+        /*--------------------------------------*/
+
+        // # API
         function api() {
-
             // Get after 150 ms until all methods are computed
             setTimeout(_get, 150);
 
-            return {
-                asc: asc,
-                between: between,
-                count: count,
-                desc: desc,
-                equals: equals,
-                first: first,
-                greaterThan: greaterThan,
-                last: last,
-                lessThan: lessThan,
-                limit: limit,
+            return{
+                decrement: decrement,
+                increment: increment,
+                pushList: pushList,
                 on: on,
-                put: put,
                 select: select,
-                startAt: startAt,
-                startsWith: startsWith,
-                useIndex: useIndex,
+                put: put,
+                putWithCondition: putWithCondition,
+                where: where
             };
 
             /*--------------------------------------*/
 
-            // ## Asc
-            function asc() {
-                _desc = false;
-
-                return this;
+            // # Decrement, ALIAS for -atomicUpdate
+            function decrement(value, attribute) {
+                _atomicUpdate(-Math.abs(value || 1), attribute);
             }
 
-            // ## Between
-            function between(valueLow, valueHigh) {
-                _where = ['~', valueLow, valueHigh];
-
-                return this;
-            }
-            
-            // # Count, ALIAS for Select = COUNT
-            function count(){
-                _select = 'COUNT';
-                
-                return this;
+            // # Increment, ALIAS for +atomicUpdate
+            function increment(value, attribute) {
+                _atomicUpdate(Math.abs(value || 1), attribute);
             }
 
-            // ## Desc
-            function desc() {
-                _desc = true;
+            // # Push List
+            function pushList(value, attribute) {
+                // If no attribute, try get from address params
+                attribute = attribute || addressParams.attribute;
 
-                return this;
-            }
-
-            // ## Equals
-            function equals(value) {
-                _where = ['=', value];
-
-                return this;
-            }
-
-            // ## First, ALIAS for Limit and Ascendent
-            function first(value) {
-                limit(value);
-                asc();
-
-                return this;
-            }
-
-            // ## Greater Than
-            function greaterThan(value) {
-                _where = ['>=', value];
-
-                return this;
-            }
-
-            // ## Last, ALIAS for Limit and Descendent
-            function last(value) {
-                limit(value);
-                desc();
-
-                return this;
-            }
-
-            // ## Less Than
-            function lessThan(value) {
-                _where = ['<=', value];
-
-                return this;
-            }
-
-            // ## Limit
-            function limit(limit) {
-                _limit = limit;
-
-                return this;
+                // test if is array
+                if (_.isArray(_dataSet[attribute])) {
+                    _pushList({
+                        attribute: attribute,
+                        value: value
+                    });
+                } else {
+                    console.error('You can\'t push into a non LIST attribute.');
+                }
             }
 
             // # On
@@ -443,179 +620,61 @@ function orangeLive(address) {
                 return this;
             }
 
-            // ## Put
-            function put(set, priority) {
-                _insert(set, priority);
-
-                return this;
-            }
-
-            // ## Select
+            // # Select
             function select(select) {
                 _select = select;
 
                 return this;
             }
 
-            // ## Start At
-            function startAt(key) {
-                _startAt = key;
+            // # Put {add or update}
+            function put(set, priority) {
+                _update(set, priority);
 
                 return this;
             }
 
-            // ## Starts With
-            function startsWith(value) {
-                _where = ['^', value];
-
-                return this;
-            }
-
-            // ## Use Index
-            function useIndex(index) {
-                _index = index;
-
-                return this;
-            }
-        }
-
-        // ## Load
-        function load(collection) {
-            _dataSet = collection.data;
-            _count = collection.count;
-
-            // Feed pagination Data
-            // Set startkeys for the next pagination page 
-            var current = _pagination.current;
-
-            if (collection.startKey) {
-                _pagination.keys[0] = null; // => required
-                _pagination.keys[current + 1] = collection.startKey;
-            }
-
-            // Enable / Disable Prev and Next
-            var keysLength = _pagination.keys.length - 1;
-
-            _pagination.isPrev = (current <= 0) ? false : true;
-            _pagination.isNext = (current >= keysLength) ? false : true;
-        }
-
-        // ## Get Callback
-        function getCallback(event) {
-            return _events[event];
-        }
-        
-        // ## Get Count
-        function getCount() {
-            return _count;
-        }
-
-        // ## Get Dataset
-        function getDataSet() {
-            return _dataSet;
-        }
-        
-        // ## Get Last Transaction
-        function getLastTransaction(){
-            return _lastTransaction;
-        }
-
-        // ## Get Pagination
-        function getPagination() {
-            return {
-                next: _pagination.isNext ? _pageNext : false,
-                prev: _pagination.isPrev ? _pagePrev : false
-            };
-        }
-
-        // # Handle special operations like, atomic or push list operations
-        function handleSpecialOperation(operation, data) {
-            //
-            var result = false;
-
-            // Fetch index from dataset
-            var dataIndex = _.findIndex(_dataSet, {key: data.key});
-
-            // Test if value belongs to actual dataset
-            if (dataIndex >= 0) {
-                //
-                result = {
-                    key: data.key
-                };
-
-                // Get actual Value
-                var actualValue = _dataSet[dataIndex][data.attribute];
-
-                switch (operation) {
-                    case 'atomicUpdate':
-                        result[data.attribute] = parseInt(actualValue) + parseInt(data.value);
-                        break
-                    case 'pushList':
-                        result[data.attribute] = actualValue.concat(data.value).sort();
-                        break;
+            // # Put with Condition
+            function putWithCondition(conditionFn, attribute) {
+                // Validate function
+                if (!_.isFunction(conditionFn)) {
+                    console.log('putWithCondition operation must have a callback FUNCTION.');
                 }
-            }
 
-            return result;
-        }
+                // If no attribute, try get from address params
+                attribute = attribute || addressParams.attribute;
 
-        // ## Put Dataset
-        function putDataSet(data) {
-            //Update Last Transacation
-            _lastTransaction = data;
-            
-            // If select, remove extras
-            if (_select) {
-                data = _removeNonSelected(data, _select);
-            }
+                // Extend dataset to result, result is gonna be changed if expression evaluates
+                var currentData = _.extend({}, _dataSet);
+                var result = {};
 
-            // Get index
-            var dataIndex = _.findIndex(_dataSet, {key: data.key});
+                // If there is attribute, pass just attribute data, otherwise all data
+                var fnResult = attribute ? conditionFn(currentData[attribute] || false) : conditionFn(!_.isEmpty(currentData) ? currentData : false);
 
-            if (_testConditions(data)) {
-                // Test OK, update data if exists, otherwise push
-                if (dataIndex >= 0) {
-                    // Update Item
-                    _.extend(_dataSet[dataIndex], data);
+                if (fnResult) {
+                    // if there is attribute, compute result as a map, otherwise compute all result
+                    if (attribute) {
+                        result[attribute] = fnResult;
+                    } else {
+                        result = fnResult;
+                    }
+
+                    // Update matching old data with result
+                    _update(_.extend(currentData, result));
                 } else {
-                    // Push Item
-                    _dataSet.push(data);
-                }
-
-                // Sort and Limit
-                _dataSet = _sortAndLimit(_dataSet);
-            } else {
-                // Test NOT OK, remove data if exists
-                if (dataIndex >= 0) {
-                    _dataSet.splice(dataIndex, 1);
+                    console.error('Condition not reached at putWithCondition operation.');
                 }
             }
+
+            // # Where
+            function where(where) {
+                _where = where;
+
+                return this;
+            }
         }
-    }
 
-    // # Item
-    function item() {
-        //
-        var _dataSet = [];
-        var _events = {};
-        var _lastTransaction = {};
-        var _select = addressParams.attribute || false;
-        var _where = addressParams.key || false;
-
-        return{
-            api: api,
-            load: load,
-            getCallback: getCallback,
-            getDataSet: getDataSet,
-            getLastTransaction: getLastTransaction,
-            handleSpecialOperation: handleSpecialOperation,
-            isOwn: isOwn,
-            putDataset: putDataset
-        };
-
-        /*--------------------------------------*/
-
-        // ## Atomic Update
+        // # Atomic Update
         function _atomicUpdate(value, attribute) {
             // If no attribute, try get from address params
             attribute = attribute || addressParams.attribute;
@@ -634,7 +693,7 @@ function orangeLive(address) {
             }
         }
 
-        // ## Get
+        // # Get
         function _get(consistent) {
             _request('item', {
                 consistent: consistent || false,
@@ -643,7 +702,55 @@ function orangeLive(address) {
             });
         }
 
-        // ## Push List
+        // # Get Callback {test if data belongs to item and return callback is exists}
+        function getCallback(event) {
+            if (_isOwn()) {
+                return _events[event];
+            }
+
+            return false;
+        }
+
+        // # Get Dataset
+        function getDataSet() {
+            return _dataSet;
+        }
+
+        // # Handle special operations like, atomic or push list operations
+        function handleSpecialOperation(operation, data) {
+            if (_isOwn()) {
+                //
+                var result = {
+                    key: data.key
+                };
+
+                // Get current data
+                var currentData = _dataSet[data.attribute];
+
+                switch (operation) {
+                    case 'atomicUpdate':
+                        result[data.attribute] = parseInt(currentData) + parseInt(data.value);
+                        break
+                    case 'pushList':
+                        result[data.attribute] = _.uniq(currentData.concat(data.value).sort());
+                        break;
+                }
+
+                return result;
+            }
+        }
+
+        // # Is Own {test if a lastChangeTransaction.key belongs to displayed item}
+        function _isOwn() {
+            return addressParams.key === lastChangeTransaction.key;
+        }
+
+        // # Load
+        function load(item) {
+            _dataSet = item.data;
+        }
+
+        // # Push List
         function _pushList(set) {
             _request('pushList', {
                 set: set,
@@ -651,7 +758,20 @@ function orangeLive(address) {
             });
         }
 
-        // ## Update
+        // # Put Datset
+        function putDataSet(data) {
+            if (_isOwn()) {
+                // If select, remove extras
+                if (_select) {
+                    data = _removeNonSelected(data, _select);
+                }
+
+                // Update Item
+                _.extend(_dataSet, data);
+            }
+        }
+
+        // # Update
         function _update(set, priority) {
             _request('update', {
                 set: set,
@@ -659,141 +779,45 @@ function orangeLive(address) {
                 where: _where || false
             });
         }
+    }
 
-        // ## API
-        function api() {
-            // Get after 150 ms until all methods are computed
-            setTimeout(_get, 150);
+    // # Remove Non Selected
+    function _removeNonSelected(data, select) {
+        //
+        var result = {};
 
-            return{
-                decrement: decrement,
-                increment: increment,
-                pushList: pushList,
-                on: on,
-                select: select,
-                put: put,
-                where: where
-            };
-
-            /*--------------------------------------*/
-
-            // ## Decrement, ALIAS for -atomicUpdate
-            function decrement(value, attribute) {
-                _atomicUpdate(-Math.abs(value || 1), attribute);
+        _.each(data, function (value, key) {
+            // If key belong to slect, and different of key
+            if (select.indexOf(key) >= 0 || key === 'key') {
+                result[key] = value;
             }
+        });
 
-            // ## Increment, ALIAS for +atomicUpdate
-            function increment(value, attribute) {
-                _atomicUpdate(Math.abs(value || 1), attribute);
-            }
+        return result;
+    }
 
-            // ## Push List
-            function pushList(value, attribute) {
-                // If no attribute, try get from address params
-                attribute = attribute || addressParams.attribute;
+    // # Request
+    function _request(operation, params) {
+        // Extend params with namespace and indexes
+        params = _.extend(params || {}, {
+            address: address,
+            indexes: indexes
+        });
 
-                // test if is array
-                if (_.isArray(_dataSet[attribute])) {
-                    _pushList({
-                        attribute: attribute,
-                        value: value
-                    });
-                } else {
-                    console.error('You can\'t push into a non LIST attribute.');
-                }
-            }
-
-            // ## On
-            function on(event, callback) {
-                // Request join
-                _request('join');
-
-                _events[event] = callback;
-
-                return this;
-            }
-
-            // ## Select
-            function select(select) {
-                _select = select;
-
-                return this;
-            }
-
-            // # Put
-            function put(set, priority) {
-                _update(set, priority);
-
-                return this;
-            }
-
-            // ## Where
-            function where(where) {
-                _where = where;
-
-                return this;
-            }
-        }
-
-        // ## Load
-        function load(item) {
-            _dataSet = item.data;
-        }
-
-        // # Handle special operations like, atomic or push list operations
-        function handleSpecialOperation(operation, data) {
-            //
-            var result = {
-                key: data.key
-            };
-
-            // Get actual Value
-            var actualValue = _dataSet[data.attribute];
-
-            switch (operation) {
-                case 'atomicUpdate':
-                    result[data.attribute] = parseInt(actualValue) + parseInt(data.value);
-                    break
-                case 'pushList':
-                    result[data.attribute] = actualValue.concat(data.value).sort();
-                    break;
-            }
-
-            return result;
-        }
-
-        // ## Get Callback
-        function getCallback(event) {
-            return _events[event];
-        }
-
-        // ## Get Dataset
-        function getDataSet() {
-            return _dataSet;
-        }
-        
-        // ## Get Last Transaction
-        function getLastTransaction(){
-            return _lastTransaction;
-        }
-
-        // ## Is Own
-        function isOwn(data) {
-            return _dataSet.key === data.key;
-        }
-
-        // ## Put Datset
-        function putDataset(data) {
-            //Update Last Transacation
-            _lastTransaction = data;
+        // Protection against continuous put operations, time is defined $putOperationInterval
+        if (['insert', 'update', 'atomicUpdate'].indexOf(operation) >= 0) {
+            var now = +new Date;
             
-            // If select, remove extras
-            if (_select) {
-                data = _removeNonSelected(data, _select);
+            if (now - lastPutOperation < putOperationInterval) {
+                lastPutOperation = now;
+                
+                console.error('You might call %s operations once each %s ms.', operation, putOperationInterval);
+                return false;
             }
-
-            // Update Item
-            _.extend(_dataSet, data);
+            
+            lastPutOperation = now;
         }
+
+        socket.emit('request', operation, params);
     }
 }

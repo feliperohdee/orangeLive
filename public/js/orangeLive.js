@@ -61,8 +61,8 @@ function orangeLive(address) {
                     // Update Collection Dataset
                     if (isCollection) {
                         instance.saveDataSet(result);
-                        // Dispatch Events
-                        dispatchEvents(['save', 'fetch']);
+                        // Dispatch Events [fetch, save, save:insert]
+                        dispatchEvents(['fetch', 'save', 'save:insert']);
                     }
                     break;
                 case 'broadcast:update':
@@ -70,8 +70,8 @@ function orangeLive(address) {
                     lastChangeTransaction = result;
                     // Update Collection/Item Dataset
                     instance.saveDataSet(result);
-                    // Dispatch Events
-                    dispatchEvents(['save', 'fetch']);
+                    // Dispatch Events [fetch, save, save:update]
+                    dispatchEvents(['fetch', 'save', 'save:update']);
                     break;
                 case 'broadcast:atomicUpdate':
                 case 'broadcast:pushList':
@@ -84,8 +84,8 @@ function orangeLive(address) {
                         lastChangeTransaction = value;
                         // Update Collection/Item Dataset
                         instance.saveDataSet(value);
-                        // Dispatch Events
-                        dispatchEvents(['save', 'fetch']);
+                        // Dispatch Events [fetch, save, save:update]
+                        dispatchEvents(['fetch', 'save', 'save:update']);
                     }
                     break;
                 case 'broadcast:stream':
@@ -574,21 +574,32 @@ function orangeLive(address) {
             var callback = instance.getCallback(event);
 
             if (callback) {
-                if (event === 'load' && isCollection) {
-                    // Collection throw dataset, count, and pagination on load
-                    var count = instance.getCount();
-                    var pagination = instance.getPagination();
+                switch (event) {
+                    case 'load':
+                        if (isCollection) {
+                            // Collection throw dataset, count, and pagination on load
+                            var count = instance.getCount();
+                            var pagination = instance.getPagination();
 
-                    callback(dataSet, count, pagination);
-                } else if (event === 'save') {
-                    // When event is save, throw just last transaction data changed
-                    callback(lastChangeTransaction);
-                } else if (event === 'stream') {
-                    // Throw just stream data
-                    callback(lastStream);
-                } else {
-                    // Otherwise throw just dataset
-                    callback(dataSet);
+                            callback(dataSet, count, pagination);
+                        } else {
+                            // Otherwise throw just dataset
+                            callback(dataSet);
+                        }
+                        break;
+                    case 'save':
+                    case 'save:insert':
+                    case 'save:update':
+                        // When event is save, throw just last transaction data changed
+                        callback(lastChangeTransaction);
+                        break;
+                    case 'stream':
+                        // Throw just stream data
+                        callback(lastStream);
+                        break;
+                    default:
+                        // Otherwise throw just dataset
+                        callback(dataSet);
                 }
             }
         });

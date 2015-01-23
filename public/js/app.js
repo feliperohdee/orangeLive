@@ -39,6 +39,8 @@ var instance = orangeLive('dlBSd$ib89$Be2/users').on('load', function (data, cou
     updateView(data);
 }).on('save', function (data) {
     console.log('instance 1 On save Event', data);
+}).on('save:update', function (data) {
+    console.log('instance 1 On save update Event', data);
 }).on('fetch', function (data) {
     console.log('instance 1 On fetch Event', data);
     updateView(data);

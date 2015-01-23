@@ -10,25 +10,26 @@ __construct();
 
 function __construct() {
     io.on('connection', function (socket) {
+        //
+        var live = orangeLive(socket);
+
         // # Request
         socket.on('request', function (operation, params) {
-            var live = orangeLive(params, socket);
-
             // Resolve namespace from address
             params.namespace = resolveNamespace(params.address);
 
             if (live[operation]) {
-                live[operation]().then(function (result) {
+                live[operation](params).then(function (result) {
                     // Ok response
                     if (_.isArray(result) || _.isObject(result)) {
-                        live.socketResponse()
+                        live.socketResponse(params)
                                 .me()
                                 .operation('sync:' + operation)
                                 .data(result);
                     }
                 }).catch(function (err) {
                     // Error response
-                    live.socketResponse()
+                    live.socketResponse(params)
                             .me()
                             .operation('sync:' + operation)
                             .error(err);
@@ -38,16 +39,8 @@ function __construct() {
     });
 }
 
-// # Resolve Namespace
-function resolveNamespace(address) {
-    // Split address
-    address = address.split('/');
-
-    return address[0] + '/' + address[1];
-}
-
 // # Orange Live
-function orangeLive(params, socket) {
+function orangeLive(socket) {
     //
     return{
         atomicUpdate: atomicUpdate,
@@ -57,13 +50,217 @@ function orangeLive(params, socket) {
         pushList: pushList,
         query: query,
         socketResponse: socketResponse,
+        stream: stream,
         update: update
     };
 
     /*----------------------------*/
 
+    // # Atomic Update
+    function atomicUpdate(params) {
+        return Promise.try(function () {
+            // Seek for Index
+            var index = _discoverIndex(params.indexes, params.set.attribute);
+            var aliasNames = [params.set.attribute];
+
+            // If index, insert it into alias names
+            if (index) {
+                aliasNames.push(index.attribute);
+            }
+
+            return aliasNames;
+        }).then(function (aliasNames) {
+            // Build Alias
+            var alias = _buildAlias(aliasNames, params.set.value);
+
+            if (!alias) {
+                throw new Error('Invalid attribute or value.');
+            }
+
+            return alias;
+        }).then(function (alias) {
+            // Build expression and define update params
+            var expression = 'SET ' + alias.map.names[0] + ' = ' + alias.map.names[0] + ' + ' + alias.map.values[0];
+
+            // If index, append expression
+            if (alias.map.names[1]) {
+                expression += ', ' + alias.map.names[1] + ' = ' + alias.map.names[1] + ' + ' + alias.map.values[0];
+            }
+
+            return {
+                alias: alias.data,
+                set: expression,
+                where: {
+                    _namespace: params.namespace,
+                    _key: params.where
+                }
+            };
+        }).then(function (updateParams) {
+            // Broadcast Operation {data is extended because set is an expression}
+            socketResponse(params)
+                    .all()
+                    .operation('broadcast:atomicUpdate')
+                    .data(_normalizeReponseData(_.extend({
+                        attribute: params.set.attribute,
+                        value: params.set.value
+                    }, updateParams.where)));
+
+            return updateParams;
+        }).then(function (updateParams) {
+            // Sync Data
+            return base.update(updateParams).then(function () {
+                return true;
+            });
+        });
+    }
+    
+    // # Build Alias
+    function _buildAlias(names, values) {
+        //
+        var result = {
+            data: {},
+            map: {}
+        };
+
+        if (!names) {
+            return false;
+        }
+
+        // Names
+        result.data.names = {};
+        result.map.names = [];
+
+        if (!_.isArray(names)) {
+            names = [names];
+        }
+
+        _.each(names, function (value, index) {
+            var id = cuid();
+            // Set name
+            result.data.names[id] = value.trim();
+            // Add on map
+            result.map.names.push('#' + id);
+        });
+
+        // Valus
+        if (values) {
+            //
+            result.data.values = {};
+            result.map.values = [];
+
+            if (!_.isArray(values)) {
+                values = [values];
+            }
+
+            _.each(values, function (value) {
+                var id = cuid();
+                // Set value
+                result.data.values[id] = value;
+                // Add on map
+                result.map.values.push(':' + id);
+            });
+        }
+
+        return result;
+    }
+
+    // # Discover Index
+    function _discoverIndex(indexes, index) {
+        //
+        var result = false;
+
+        // Discover Index
+        var string = indexes.string.indexOf(index);
+        var number = indexes.number.indexOf(index);
+
+        if (string >= 0) {
+            result = {
+                name: 'stringIndex' + string, // stringIndex0 or stringIndex1
+                attribute: '_si' + string // _si0 or _si1
+            };
+        }
+
+        if (number >= 0) {
+            result = {
+                name: 'numberIndex' + number, // numberIndex0 or numberIndex1
+                attribute: '_ni' + number // _ni0 or _ni1
+            };
+        }
+
+        return result;
+    }
+
+    // # Encode Index Set
+    function _encodeIndexSet(indexes, set) {
+        var result = {};
+
+        // Always delete key
+        delete set.key;
+
+        // String Index
+        if (indexes.string) {
+            _.each(indexes.string, function (attribute, key) {
+                if (set[attribute]) { // if set attribute exists
+                    result['_si' + (key % 2)] = set[attribute]; // key % 2 guarantees 0 or 1
+                }
+            });
+        }
+
+        // Number Index
+        if (indexes.number) {
+            _.each(indexes.number, function (attribute, key) {
+                if (set[attribute]) { // if set attribute exists
+                    result['_ni' + (key % 2)] = set[attribute]; // key % 2 guarantees 0 or 1
+                }
+            });
+        }
+
+        // Match indexes results
+        return _.extend(set, result);
+    }
+
+    // ## Insert Operation
+    function insert(params) {
+        return Promise.try(function () {
+            // Build Insert params
+            return {
+                set: _.extend(params.set, {
+                    _namespace: params.namespace,
+                    _key: params.set.key || '-' + cuid() // Generate new key if no one provided
+                })
+            };
+        }).then(function (insertParams) {
+            // Append priority if exists
+            if (params.priority) {
+                insertParams.set._pi = params.priority;
+            }
+
+            return insertParams;
+        }).then(function (insertParams) {
+            // Encode Indexes
+            if (params.indexes) {
+                insertParams.set = _encodeIndexSet(params.indexes, insertParams.set);
+            }
+
+            return insertParams;
+        }).then(function (insertParams) {
+            // Broadcast Operation
+            socketResponse(params)
+                    .all()
+                    .operation('broadcast:insert')
+                    .data(_normalizeReponseData(insertParams.set));
+
+            return insertParams;
+        }).then(function (insertParams) {
+            // Sync Data
+            return base.insert(insertParams).then(function () {
+                return true;
+            });
+        });
+    }
+
     // # Item Operation
-    function item() {
+    function item(params) {
         return Promise.try(function () {
             // Define item params
             return {
@@ -103,48 +300,8 @@ function orangeLive(params, socket) {
         });
     }
 
-    // ## Insert Operation
-    function insert() {
-        return Promise.try(function () {
-            // Build Insert params
-            return {
-                set: _.extend(params.set, {
-                    _namespace: params.namespace,
-                    _key: params.set.key || '-' + cuid() // Generate new key if no one provided
-                })
-            };
-        }).then(function (insertParams) {
-            // Append priority if exists
-            if (params.priority) {
-                insertParams.set._pi = params.priority;
-            }
-
-            return insertParams;
-        }).then(function (insertParams) {
-            // Encode Indexes
-            if (params.indexes) {
-                insertParams.set = _encodeIndexSet(insertParams.set);
-            }
-
-            return insertParams;
-        }).then(function (insertParams) {
-            // Broadcast Operation
-            socketResponse()
-                    .all()
-                    .operation('broadcast:insert')
-                    .data(_normalizeReponseData(insertParams.set));
-
-            return insertParams;
-        }).then(function (insertParams) {
-            // Sync Data
-            return base.insert(insertParams).then(function () {
-                return true;
-            });
-        });
-    }
-
     // # Join Operation
-    function join() {
+    function join(params) {
         // Join new namespace, if not connected yet
         return Promise.try(function () {
             if (socket.rooms.indexOf(params.namespace) < 0) {
@@ -157,7 +314,7 @@ function orangeLive(params, socket) {
     }
 
     // # Push List Operation
-    function pushList() {
+    function pushList(params) {
         return Promise.try(function () {
             // Build Alias
             // Double array required => First to perform _buildAlias and another is the kind of data
@@ -191,10 +348,9 @@ function orangeLive(params, socket) {
         }).then(function (updateParams) {
             // Sync Data
             return base.update(updateParams).then(function (res) {
-
-                // Broadcast Operation
+                // Broadcast Operation {data is extended because set is an expression}
                 // - Just broadcast when operation is done because it can fail when data type doesn't match
-                socketResponse()
+                socketResponse(params)
                         .all()
                         .operation('broadcast:pushList')
                         .data(_normalizeReponseData(_.extend({
@@ -208,7 +364,7 @@ function orangeLive(params, socket) {
     }
 
     // # Query Operation
-    function query() {
+    function query(params) {
         return Promise.try(function () {
             // Build initial query params
             return {
@@ -249,7 +405,7 @@ function orangeLive(params, socket) {
             // Define Indexes
             if (params.index && params.indexes) {
                 // Discover and get Index
-                var index = _discoverIndex(params.index);
+                var index = _discoverIndex(params.indexes, params.index);
 
                 // Set indexed by
                 queryParams.indexedBy = index.name;
@@ -278,8 +434,8 @@ function orangeLive(params, socket) {
     }
 
     // # Response
-    function socketResponse() {
-
+    function socketResponse(params) {
+        //
         var responseParams = {};
 
         // Delay execution 150 ms
@@ -339,69 +495,32 @@ function orangeLive(params, socket) {
             return this;
         }
     }
-
-    // # Atomic Update
-    function atomicUpdate() {
+    
+    // # Stream {Broadcast data without persistence}
+    function stream(params) {
         return Promise.try(function () {
-            // Seek for Index
-            var index = _discoverIndex(params.set.attribute);
-            var aliasNames = [params.set.attribute];
-
-            // If index, insert it into alias names
-            if (index) {
-                aliasNames.push(index.attribute);
+            // Validate
+            if (!params.data) {
+                throw new Error('validationError: No valid event or data provided.');
             }
-
-            return aliasNames;
-        }).then(function (aliasNames) {
-            // Build Alias
-            var alias = _buildAlias(aliasNames, params.set.value);
-
-            if (!alias) {
-                throw new Error('Invalid attribute or value.');
+            
+            // Valida data length
+            if(JSON.stringify(params.data).length > 100){
+                throw new Error('validationError: Data needs to have maximum 100 characteres.');
             }
-
-            return alias;
-        }).then(function (alias) {
-            // Build expression and define update params
-            //var expression = 'ADD ' + alias.map.names[0] + ' ' + alias.map.values[0];
-            var expression = 'SET ' + alias.map.names[0] + ' = ' + alias.map.names[0] + ' + ' + alias.map.values[0];
-
-            // If index, append expression
-            if (alias.map.names[1]) {
-                //expression += ', ' + alias.map.names[1] + ' ' + alias.map.values[0];
-                expression += ', ' + alias.map.names[1] + ' = ' + alias.map.names[1] + ' + ' + alias.map.values[0];
-            }
-
-            return {
-                alias: alias.data,
-                set: expression,
-                where: {
-                    _namespace: params.namespace,
-                    _key: params.where
-                }
-            };
-        }).then(function (updateParams) {
+        }).then(function () {
             // Broadcast Operation
-            socketResponse()
+            socketResponse(params)
                     .all()
-                    .operation('broadcast:atomicUpdate')
-                    .data(_normalizeReponseData(_.extend({
-                        attribute: params.set.attribute,
-                        value: params.set.value
-                    }, updateParams.where)));
+                    .operation('broadcast:stream')
+                    .data(params.data);
 
-            return updateParams;
-        }).then(function (updateParams) {
-            // Sync Data
-            return base.update(updateParams).then(function () {
-                return true;
-            });
+            return true;
         });
     }
 
     // ## Update Operation
-    function update() {
+    function update(params) {
         return Promise.try(function () {
             // Validate
             if (!params.where) {
@@ -419,7 +538,7 @@ function orangeLive(params, socket) {
         }).then(function (updateParams) {
             // Encode Indexes
             if (params.indexes) {
-                updateParams.set = _encodeIndexSet(updateParams.set);
+                updateParams.set = _encodeIndexSet(params.indexes, updateParams.set);
             }
 
             return updateParams;
@@ -431,8 +550,8 @@ function orangeLive(params, socket) {
 
             return updateParams;
         }).then(function (updateParams) {
-            // Broadcast Operation
-            socketResponse()
+            // Broadcast Operation {data is extended because other side needs to receive where.key}
+            socketResponse(params)
                     .all()
                     .operation('broadcast:update')
                     .data(_normalizeReponseData(_.extend(updateParams.set, updateParams.where)));
@@ -444,111 +563,6 @@ function orangeLive(params, socket) {
                 return true;
             });
         });
-    }
-
-    // # Build Alias
-    function _buildAlias(names, values) {
-        //
-        var result = {
-            data: {},
-            map: {}
-        };
-
-        if (!names) {
-            return false;
-        }
-
-        // Names
-        result.data.names = {};
-        result.map.names = [];
-
-        if (!_.isArray(names)) {
-            names = [names];
-        }
-
-        _.each(names, function (value, index) {
-            var id = cuid();
-            // Set name
-            result.data.names[id] = value.trim();
-            // Add on map
-            result.map.names.push('#' + id);
-        });
-
-        // Valus
-        if (values) {
-            //
-            result.data.values = {};
-            result.map.values = [];
-
-            if (!_.isArray(values)) {
-                values = [values];
-            }
-
-            _.each(values, function (value) {
-                var id = cuid();
-                // Set value
-                result.data.values[id] = value;
-                // Add on map
-                result.map.values.push(':' + id);
-            });
-        }
-
-        return result;
-    }
-
-    // # Discover Index
-    function _discoverIndex(index) {
-        //
-        var result = false;
-
-        // Discover Index
-        var string = params.indexes.string.indexOf(index);
-        var number = params.indexes.number.indexOf(index);
-
-        if (string >= 0) {
-            result = {
-                name: 'stringIndex' + string, // stringIndex0 or stringIndex1
-                attribute: '_si' + string // _si0 or _si1
-            };
-        }
-
-        if (number >= 0) {
-            result = {
-                name: 'numberIndex' + number, // numberIndex0 or numberIndex1
-                attribute: '_ni' + number // _ni0 or _ni1
-            };
-        }
-
-        return result;
-    }
-
-    // # Encode Index Set
-    function _encodeIndexSet(set) {
-        var result = {};
-
-        // Always delete key
-        delete set.key;
-
-        // String Index
-        if (params.indexes.string) {
-            _.each(params.indexes.string, function (attribute, key) {
-                if (set[attribute]) { // if set attribute exists
-                    result['_si' + (key % 2)] = set[attribute]; // key % 2 guarantees 0 or 1
-                }
-            });
-        }
-
-        // Number Index
-        if (params.indexes.number) {
-            _.each(params.indexes.number, function (attribute, key) {
-                if (set[attribute]) { // if set attribute exists
-                    result['_ni' + (key % 2)] = set[attribute]; // key % 2 guarantees 0 or 1
-                }
-            });
-        }
-
-        // Match indexes results
-        return _.extend(set, result);
     }
 
     // # Normalize Response Data
@@ -572,4 +586,12 @@ function orangeLive(params, socket) {
 
         return _data;
     }
+}
+
+// # Resolve Namespace
+function resolveNamespace(address) {
+    // Split address
+    address = address.split('/');
+
+    return address[0] + '/' + address[1];
 }

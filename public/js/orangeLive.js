@@ -119,6 +119,7 @@ function orangeLive(address) {
         var _dataSet = [];
         var _desc = false;
         var _events = {};
+        var _filters = [];
         var _index = false;
         var _limit = false;
         var _pagination = {
@@ -155,17 +156,19 @@ function orangeLive(address) {
                 count: count,
                 desc: desc,
                 equals: equals,
+                filter: filter,
                 first: first,
                 greaterThan: greaterThan,
                 last: last,
                 lessThan: lessThan,
                 limit: limit,
                 on: on,
+                or: or,
                 save: save,
                 select: select,
                 startAt: startAt,
                 startsWith: startsWith,
-                useIndex: useIndex,
+                where: where
             };
 
             /*--------------------------------------*/
@@ -202,6 +205,18 @@ function orangeLive(address) {
             function equals(value) {
                 _where = ['=', value];
 
+                return this;
+            }
+            
+            // # Filter
+            function filter(attribute, operation, value, or){
+                _filters.push({
+                    attribute: attribute,
+                    operation: operation,
+                    value: value,
+                    or: or
+                });
+                
                 return this;
             }
 
@@ -251,6 +266,13 @@ function orangeLive(address) {
 
                 return this;
             }
+            
+            // Or, ALIAS to filter with OR param
+            function or(attribute, operation, value){
+                filter(attribute, operation, value, true);
+                
+                return this;
+            }
 
             // # Save {insert or update}
             function save(set, priority) {
@@ -281,8 +303,8 @@ function orangeLive(address) {
                 return this;
             }
 
-            // # Use Index
-            function useIndex(index) {
+            // # Where {Define index to be used}
+            function where(index) {
                 // Test if index is defined
                 if (indexes.string.indexOf(index) < 0 && indexes.number.indexOf(index) < 0) {
                     console.error('The index %s is not defined, the collection won\'t be ordenated or fetched by this index.', index);
@@ -297,8 +319,9 @@ function orangeLive(address) {
         // # Get
         function _get(consistent) {
             _requestQuery({
-                consistent: consistent,
+                consistent: consistent || false,
                 desc: _desc,
+                filters: _filters,
                 index: _index,
                 limit: _limit,
                 select: _select,
@@ -953,6 +976,7 @@ function orangeLive(address) {
         _request('query', {
             consistent: params.consistent,
             desc: params.desc,
+            filters: params.filters,
             index: params.index,
             limit: params.limit,
             select: params.select,

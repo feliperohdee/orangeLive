@@ -131,6 +131,9 @@ function query(params) {
     if (params.where)
         query.where(params.where);
 
+    if (params.withFilter)
+        query.withFilter(params.withFilter);
+
     return query.exec();
 }
 

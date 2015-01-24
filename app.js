@@ -3,9 +3,11 @@ var express = require('express');
 // Start HTTP Server
 var app = express();
 var server = require('http').Server(app);
-global.io = require('socket.io')(server);
 
-// Requires
+var redisAdapter = require('socket.io-redis');
+global.io = require('socket.io')(server).adapter(redisAdapter({ host: 'localhost', port: 6379 }));;
+
+// Requirements
 var debug = require('debug')('orangeLive');
 var path = require('path');
 var favicon = require('serve-favicon');

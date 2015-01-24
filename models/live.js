@@ -113,7 +113,7 @@ function orangeLive(socket) {
             });
         });
     }
-    
+
     // # Build Alias
     function _buildAlias(names, values) {
         //
@@ -134,12 +134,26 @@ function orangeLive(socket) {
             names = [names];
         }
 
-        _.each(names, function (value, index) {
-            var id = cuid();
-            // Set name
-            result.data.names[id] = value.trim();
-            // Add on map
-            result.map.names.push('#' + id);
+        // Iterate over names
+        _.each(names, function (name, nameIndex) {
+            // Split paths from name
+            name = name.split('.');
+
+            // Iterate over name do handle path's
+            _.each(name, function (value, pathIndex) {
+                var id = cuid();
+                // Set data.name
+                result.data.names[id] = value.trim();
+
+                // Set map.name
+                if (pathIndex <= 0) {
+                    // Path is root, just push name
+                    result.map.names.push('#' + id);
+                } else {
+                    // It means there is path, then extend map.names[index] with this path
+                    result.map.names[nameIndex] += '.#' + id;
+                }
+            });
         });
 
         // Valus
@@ -402,6 +416,83 @@ function orangeLive(socket) {
 
             return queryParams;
         }).then(function (queryParams) {
+            // Define Filter
+            if (params.filters.length) {
+                //
+                var filterExpression = '';
+                var filterAlias = {};
+
+                _.each(params.filters, function (filter, index) {
+                    //
+                    var alias = _buildAlias(filter.attribute, filter.value);
+
+                    if (!alias) {
+                        throw new Error('Invalid attribute or value.');
+                    }
+
+                    switch (filter.operation) {
+                        case 'attrExists':
+                            filterExpression += 'attribute_exists(' + alias.map.names[0] + ')';
+                            break;
+                        case 'attrNotExists':
+                            filterExpression += 'attribute_not_exists(' + alias.map.names[0] + ')';
+                            break;
+                        case 'beginsWith':
+                            filterExpression += 'begins_with(' + alias.map.names[0] + ', ' + alias.map.values[0] + ')';
+                            break;
+                        case 'between':
+                            filterExpression += alias.map.names[0] + ' BETWEEN ' + alias.map.values[0] + ' AND ' + alias.map.values[1];
+                            break;
+                        case 'contains':
+                            filterExpression += 'contains(' + alias.map.names[0] + ', ' + alias.map.values[0] + ')';
+                            break;
+                        case 'equals':
+                            filterExpression += alias.map.names[0] + ' = ' + alias.map.values[0];
+                            break;
+                        case 'greaterThan':
+                            filterExpression += alias.map.names[0] + ' >= ' + alias.map.values[0];
+                            break;
+                        case 'lessThan':
+                            filterExpression += alias.map.names[0] + ' <= ' + alias.map.values[0];
+                            break;
+                        case 'notEquals':
+                            filterExpression += alias.map.names[0] + ' <> ' + alias.map.values[0];
+                            break;
+                    }
+
+                    // If morte than one filter, get next comparision
+                    if (index < params.filters.length - 1) {
+                        filterExpression += params.filters[index + 1].or ? ' OR ' : ' AND ';
+                    }
+
+                    // Extend alias names
+                    if (!_.isEmpty(alias.data.names)) {
+                        //
+                        if (!filterAlias.names) {
+                            filterAlias.names = {};
+                        }
+
+                        _.extend(filterAlias.names, alias.data.names);
+                    }
+                    
+                    // Extend alias values
+                    if (!_.isEmpty(alias.data.values)) {
+                        //
+                        if (!filterAlias.values) {
+                            filterAlias.values = {};
+                        }
+
+                        _.extend(filterAlias.values, alias.data.values);
+                    }
+                });
+
+                // Set filter alias and expression
+                queryParams.alias = filterAlias;
+                queryParams.withFilter = filterExpression;
+            }
+
+            return queryParams;
+        }).then(function (queryParams) {
             // Define Indexes
             if (params.index && params.indexes) {
                 // Discover and get Index
@@ -495,7 +586,7 @@ function orangeLive(socket) {
             return this;
         }
     }
-    
+
     // # Stream {Broadcast data without persistence}
     function stream(params) {
         return Promise.try(function () {
@@ -503,9 +594,9 @@ function orangeLive(socket) {
             if (!params.data) {
                 throw new Error('validationError: No valid event or data provided.');
             }
-            
+
             // Valida data length
-            if(JSON.stringify(params.data).length > 100){
+            if (JSON.stringify(params.data).length > 100) {
                 throw new Error('validationError: Data needs to have maximum 100 characteres.');
             }
         }).then(function () {

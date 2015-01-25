@@ -1,6 +1,6 @@
 // # App
 //var instance = orangeLive('*').select('name, height, age').useIndex('height');
-var instance = orangeLive('dlBSd$ib89$Be2/users').filter('array', 'contains', 'b').on('load', function (data, count, pagination) {
+var instance = orangeLive('dlBSd$ib89$Be2/users').on('load', function (data, count, pagination) {
     console.log('instance 1', data);
     console.log('instance 1 count', count);
 
@@ -94,7 +94,7 @@ function update() {
 }
 
 function pushList() {
-    instance2.pushList('a', 'array');
+    instance2.pushList('pqno', 'array');
 }
 
 var instance3 = orangeLive('dlBSd$ib89$Be2/users/rohde5').on('load', function (data) {

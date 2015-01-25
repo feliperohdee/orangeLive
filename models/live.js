@@ -10,29 +10,16 @@ __construct();
 
 function __construct() {
     io.on('connection', function (socket) {
-        //
-        var live = orangeLive(socket);
+        // Resolve namespace from address
+        var namespace = resolveNamespace(socket.handshake.query.address);
+        var live = orangeLive(namespace, socket);
 
         // # Request
         socket.on('request', function (operation, params) {
-            // Resolve namespace from address
-            params.namespace = resolveNamespace(params.address);
-
             if (live[operation]) {
-                live[operation](params).then(function (result) {
-                    // Ok response
-                    if (_.isArray(result) || _.isObject(result)) {
-                        live.socketResponse(params)
-                                .me()
-                                .operation('sync:' + operation)
-                                .data(result);
-                    }
-                }).catch(function (err) {
+                live[operation](params).catch(function (err) {
                     // Error response
-                    live.socketResponse(params)
-                            .me()
-                            .operation('sync:' + operation)
-                            .error(err);
+                    live.sendError(params, 'tech:' + operation, err);
                 });
             }
         });
@@ -40,79 +27,21 @@ function __construct() {
 }
 
 // # Orange Live
-function orangeLive(socket) {
+function orangeLive(namespace, socket) {
     //
+    var lastUpdate = 0;
+
     return{
-        atomicUpdate: atomicUpdate,
         insert: insert,
         item: item,
         join: join,
-        pushList: pushList,
         query: query,
-        socketResponse: socketResponse,
+        sendError: sendError,
         stream: stream,
         update: update
     };
 
     /*----------------------------*/
-
-    // # Atomic Update
-    function atomicUpdate(params) {
-        return Promise.try(function () {
-            // Seek for Index
-            var index = _discoverIndex(params.indexes, params.set.attribute);
-            var aliasNames = [params.set.attribute];
-
-            // If index, insert it into alias names
-            if (index) {
-                aliasNames.push(index.attribute);
-            }
-
-            return aliasNames;
-        }).then(function (aliasNames) {
-            // Build Alias
-            var alias = _buildAlias(aliasNames, params.set.value);
-
-            if (!alias) {
-                throw new Error('Invalid attribute or value.');
-            }
-
-            return alias;
-        }).then(function (alias) {
-            // Build expression and define update params
-            var expression = 'SET ' + alias.map.names[0] + ' = ' + alias.map.names[0] + ' + ' + alias.map.values[0];
-
-            // If index, append expression
-            if (alias.map.names[1]) {
-                expression += ', ' + alias.map.names[1] + ' = ' + alias.map.names[1] + ' + ' + alias.map.values[0];
-            }
-
-            return {
-                alias: alias.data,
-                set: expression,
-                where: {
-                    _namespace: params.namespace,
-                    _key: params.where
-                }
-            };
-        }).then(function (updateParams) {
-            // Broadcast Operation {data is extended because set is an expression}
-            socketResponse(params)
-                    .all()
-                    .operation('broadcast:atomicUpdate')
-                    .data(_normalizeReponseData(_.extend({
-                        attribute: params.set.attribute,
-                        value: params.set.value
-                    }, updateParams.where)));
-
-            return updateParams;
-        }).then(function (updateParams) {
-            // Sync Data
-            return base.update(updateParams).then(function () {
-                return true;
-            });
-        });
-    }
 
     // # Build Alias
     function _buildAlias(names, values) {
@@ -239,7 +168,7 @@ function orangeLive(socket) {
             // Build Insert params
             return {
                 set: _.extend(params.set, {
-                    _namespace: params.namespace,
+                    _namespace: namespace,
                     _key: params.set.key || '-' + cuid() // Generate new key if no one provided
                 })
             };
@@ -259,16 +188,13 @@ function orangeLive(socket) {
             return insertParams;
         }).then(function (insertParams) {
             // Broadcast Operation
-            socketResponse(params)
-                    .all()
-                    .operation('broadcast:insert')
-                    .data(_normalizeReponseData(insertParams.set));
+            _sendBroadcast('insert', insertParams.set);
 
             return insertParams;
         }).then(function (insertParams) {
             // Sync Data
-            return base.insert(insertParams).then(function () {
-                return true;
+            base.insert(insertParams).catch(function (err) {
+                sendError(params, 'sync:insert', err);
             });
         });
     }
@@ -279,7 +205,7 @@ function orangeLive(socket) {
             // Define item params
             return {
                 where: {
-                    _namespace: params.namespace
+                    _namespace: namespace
                 }
             };
         }).then(function (itemParams) {
@@ -307,73 +233,23 @@ function orangeLive(socket) {
             // Fetch item
             return base.item(itemParams);
         }).then(function (result) {
-            // Normalize data
+            // Normalize data and send
             result.data = _normalizeReponseData(result.data);
 
-            return result;
+            _sendData('sync:item', result);
         });
     }
 
     // # Join Operation
-    function join(params) {
+    function join() {
         // Join new namespace, if not connected yet
         return Promise.try(function () {
-            if (socket.rooms.indexOf(params.namespace) < 0) {
-                socket.join(params.namespace);
+            if (socket.rooms.indexOf(namespace) < 0) {
+                socket.join(namespace);
                 return true;
             }
 
             return false;
-        });
-    }
-
-    // # Push List Operation
-    function pushList(params) {
-        return Promise.try(function () {
-            // Build Alias
-            // Double array required => First to perform _buildAlias and another is the kind of data
-            var alias = _buildAlias(params.set.attribute, [[params.set.value]]);
-
-            if (!alias) {
-                throw new Error('Invalid attribute or value.');
-            }
-
-            return alias;
-        }).then(function (alias) {
-            // Build expression and define update params
-            var expression;
-
-            if (_.isObject(params.set.value)) {
-                // Expression for [{map}]
-                expression = 'SET ' + alias.map.names[0] + ' = list_append(' + alias.map.names[0] + ', ' + alias.map.values[0] + ')';
-            } else {
-                // Expression for SS or NS
-                expression = 'ADD ' + alias.map.names[0] + ' ' + alias.map.values[0];
-            }
-
-            return {
-                alias: alias.data,
-                set: expression,
-                where: {
-                    _namespace: params.namespace,
-                    _key: params.where
-                }
-            };
-        }).then(function (updateParams) {
-            // Sync Data
-            return base.update(updateParams).then(function (res) {
-                // Broadcast Operation {data is extended because set is an expression}
-                // - Just broadcast when operation is done because it can fail when data type doesn't match
-                socketResponse(params)
-                        .all()
-                        .operation('broadcast:pushList')
-                        .data(_normalizeReponseData(_.extend({
-                            attribute: params.set.attribute,
-                            value: params.set.value
-                        }, updateParams.where)));
-
-                return true;
-            });
         });
     }
 
@@ -387,7 +263,7 @@ function orangeLive(socket) {
                 limit: params.limit,
                 startAt: params.startAt,
                 where: {
-                    _namespace: ['=', params.namespace]
+                    _namespace: ['=', namespace]
                 }
             };
         }).then(function (queryParams) {
@@ -474,7 +350,7 @@ function orangeLive(socket) {
 
                         _.extend(filterAlias.names, alias.data.names);
                     }
-                    
+
                     // Extend alias values
                     if (!_.isEmpty(alias.data.values)) {
                         //
@@ -520,12 +396,38 @@ function orangeLive(socket) {
                 return _normalizeReponseData(data);
             });
 
-            return result;
+            _sendData('sync:query', result);
         });
     }
 
+    // # Send Broadcast
+    function _sendBroadcast(operation, data) {
+        _socketResponse()
+                .all()
+                .operation('broadcast:' + operation)
+                .data(_normalizeReponseData(data));
+    }
+
+    // # Send error
+    function sendError(operation, error) {
+        // Error response
+        _socketResponse()
+                .me()
+                .operation(operation)
+                .error(error);
+    }
+
+    // # Send data
+    function _sendData(operation, data) {
+        // Success response
+        _socketResponse()
+                .me()
+                .operation(operation)
+                .data(data);
+    }
+
     // # Response
-    function socketResponse(params) {
+    function _socketResponse() {
         //
         var responseParams = {};
 
@@ -553,7 +455,7 @@ function orangeLive(socket) {
 
         // # All
         function all() {
-            responseParams.to = params.namespace;
+            responseParams.to = namespace;
 
             return this;
         }
@@ -601,12 +503,7 @@ function orangeLive(socket) {
             }
         }).then(function () {
             // Broadcast Operation
-            socketResponse(params)
-                    .all()
-                    .operation('broadcast:stream')
-                    .data(params.data);
-
-            return true;
+            _sendBroadcast('stream', params.data);
         });
     }
 
@@ -622,7 +519,7 @@ function orangeLive(socket) {
             return {
                 set: params.set,
                 where: {
-                    _namespace: params.namespace,
+                    _namespace: namespace,
                     _key: params.where
                 }
             };
@@ -641,18 +538,80 @@ function orangeLive(socket) {
 
             return updateParams;
         }).then(function (updateParams) {
-            // Broadcast Operation {data is extended because other side needs to receive where.key}
-            socketResponse(params)
-                    .all()
-                    .operation('broadcast:update')
-                    .data(_normalizeReponseData(_.extend(updateParams.set, updateParams.where)));
+            // If special update operation
+            if (params.special) {
+                // Build Alias
+                var alias;
+                var expression;
+
+                switch (params.special) {
+                    case 'atomic':
+                        // Build Alias
+                        alias = _buildAlias(_.keys(updateParams.set), _.uniq(_.values(updateParams.set)));
+
+                        if (!alias) {
+                            throw new Error('Invalid attribute or value.');
+                        }
+
+                        // Build expression and define update param
+                        expression = 'SET ' + alias.map.names[0] + ' = ' + alias.map.names[0] + ' + ' + alias.map.values[0];
+
+                        // If index, append expression
+                        if (alias.map.names[1]) {
+                            expression += ', ' + alias.map.names[1] + ' = ' + alias.map.names[1] + ' + ' + alias.map.values[0];
+                        }
+                        break;
+                    case 'push':
+                        // Build Alias
+                        alias = _buildAlias(_.keys(updateParams.set), _.uniq([_.values(updateParams.set)])); // <= Array notation is required
+
+                        if (!alias) {
+                            throw new Error('Invalid attribute or value.');
+                        }
+
+                        if (_.isObject(params.set.value)) {
+                            // Expression for [{map}]
+                            expression = 'SET ' + alias.map.names[0] + ' = list_append(' + alias.map.names[0] + ', ' + alias.map.values[0] + ')';
+                        } else {
+                            // Expression for SS or NS
+                            expression = 'ADD ' + alias.map.names[0] + ' ' + alias.map.values[0];
+                        }
+                        break;
+                }
+
+                // Extend update params with alias, and expression
+                _.extend(updateParams, {
+                    alias: alias.data,
+                    set: expression
+                });
+            }
 
             return updateParams;
         }).then(function (updateParams) {
-            // Sync Data
-            return base.update(updateParams).then(function () {
-                return true;
-            });
+            // Broadcast Operation {data is extended because other side needs to receive where.key}
+            var data = _.extend({}, _.isObject(updateParams.set) ? updateParams.set : params.set, updateParams.where);
+            var operation = 'update' + (params.special ? ':' + params.special : '');
+
+            _sendBroadcast(operation, data);
+
+            return updateParams;
+        }).then(function (updateParams) {
+            // Sync Data {special operations starts immediately, basic update wait 1s}
+            if (params.special) {
+                updateBase();
+            } else {
+                clearTimeout(lastUpdate);
+                lastUpdate = setTimeout(updateBase, 1000);
+            }
+
+            // Just a update function definition
+            function updateBase() {
+                base.update(updateParams).catch(function (err) {
+                    var operation = 'update' + (params.special ? ':' + params.special : '');
+
+                    sendError(params, 'sync:' + operation, err);
+                });
+            }
         });
     }
 

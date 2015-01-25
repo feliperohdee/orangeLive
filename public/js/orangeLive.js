@@ -19,13 +19,9 @@ function orangeLive(address) {
     var lastStream = false;
 
     var socket = io({
-        forceNew: true
+        forceNew: true,
+        query: 'address=' + address
     });
-
-    var timers = {
-        lastOperation: 0,
-        operationRateLimit: 100
-    };
 
     return __construct();
 
@@ -73,10 +69,10 @@ function orangeLive(address) {
                     // Dispatch Events [fetch, save, save:update]
                     dispatchEvents(['fetch', 'save', 'save:update']);
                     break;
-                case 'broadcast:atomicUpdate':
-                case 'broadcast:pushList':
-                    // Get atomicUpdate or pushList
-                    var specialOperation = operation.split(':')[1];
+                case 'broadcast:update:atomic':
+                case 'broadcast:update:push':
+                    // Get atomic or push
+                    var specialOperation = operation.split(':')[2];
                     var value = instance.handleSpecialOperation(specialOperation, result);
 
                     if (value) {
@@ -207,16 +203,16 @@ function orangeLive(address) {
 
                 return this;
             }
-            
+
             // # Filter
-            function filter(attribute, operation, value, or){
+            function filter(attribute, operation, value, or) {
                 _filters.push({
                     attribute: attribute,
                     operation: operation,
                     value: value,
                     or: or
                 });
-                
+
                 return this;
             }
 
@@ -266,11 +262,11 @@ function orangeLive(address) {
 
                 return this;
             }
-            
+
             // Or, ALIAS to filter with OR param
-            function or(attribute, operation, value){
+            function or(attribute, operation, value) {
                 filter(attribute, operation, value, true);
-                
+
                 return this;
             }
 
@@ -380,33 +376,17 @@ function orangeLive(address) {
 
         // # Handle special operations like, atomic or push list operations
         function handleSpecialOperation(operation, data) {
-            //
-            var result = false;
-
             // Fetch index from dataset
             var dataIndex = _.findIndex(_dataSet, {key: data.key});
+            var currentData = _dataSet[dataIndex];
 
             // Test if value belongs to actual dataset
             if (dataIndex >= 0) {
                 //
-                result = {
-                    key: data.key
-                };
-
-                // Get current data
-                var currentData = _dataSet[dataIndex][data.attribute];
-
-                switch (operation) {
-                    case 'atomicUpdate':
-                        result[data.attribute] = parseInt(currentData) + parseInt(data.value);
-                        break
-                    case 'pushList':
-                        result[data.attribute] = _.uniq(currentData.concat(data.value).sort());
-                        break;
-                }
+                return _applySpecialOperation(operation, currentData, data);
             }
 
-            return result;
+            return false;
         }
 
         // # Load
@@ -476,9 +456,10 @@ function orangeLive(address) {
 
             if (_testWhere(data)) {
                 // Test OK, update data if key already exists, otherwise push
-                // (collection.save might insert or update)
+                // (collection.save might insert or update) TODO
                 if (dataIndex >= 0) {
                     // Update Item
+                    console.log(data); // <======== *
                     _.extend(_dataSet[dataIndex], data);
                 } else {
                     // Push Item
@@ -655,19 +636,19 @@ function orangeLive(address) {
             return{
                 decrement: decrement,
                 increment: increment,
-                pushList: pushList,
                 on: on,
                 save: save,
                 saveWithCondition: saveWithCondition,
                 select: select,
-                where: where
+                where: where,
+                updatePush: updatePush
             };
 
             /*--------------------------------------*/
 
             // # Decrement, ALIAS for -atomicUpdate
             function decrement(value, attribute) {
-                _atomicUpdate(-Math.abs(value || 1), attribute);
+                _updateAtomic(-Math.abs(value || 1), attribute);
             }
 
             // # Get
@@ -681,28 +662,7 @@ function orangeLive(address) {
 
             // # Increment, ALIAS for +atomicUpdate
             function increment(value, attribute) {
-                _atomicUpdate(Math.abs(value || 1), attribute);
-            }
-
-            // # Push List
-            function pushList(value, attribute) {
-                // If no attribute, try get from address params
-                if (!attribute) {
-                    attribute = addressParams.attribute;
-                }
-
-                // test if is array
-                if (_.isArray(_dataSet[attribute])) {
-                    _requestPushList({
-                        set: {
-                            attribute: attribute,
-                            value: value
-                        },
-                        where: _where
-                    });
-                } else {
-                    console.error('You can\'t push into a non LIST attribute.');
-                }
+                _updateAtomic(Math.abs(value || 1), attribute);
             }
 
             // # On
@@ -763,32 +723,34 @@ function orangeLive(address) {
                 return this;
             }
 
+            // # Update Push
+            function updatePush(value, attribute) {
+                // If no attribute, try get from address params
+                if (!attribute) {
+                    attribute = addressParams.attribute;
+                }
+
+                // test if is array
+                if (_.isArray(_dataSet[attribute])) {
+                    //
+                    var pushListSet = {};
+                    pushListSet[attribute] = value;
+
+                    _requestUpdate({
+                        set: pushListSet,
+                        special: 'push',
+                        where: _where
+                    });
+                } else {
+                    console.error('You can\'t push into a non LIST attribute.');
+                }
+            }
+
             // # Where
             function where(where) {
                 _where = where;
 
                 return this;
-            }
-        }
-
-        // # Atomic Update
-        function _atomicUpdate(value, attribute) {
-            // If no attribute, try get from address params
-            if (!attribute) {
-                attribute = addressParams.attribute;
-            }
-
-            // test if is number
-            if (_.isNumber(_dataSet[attribute])) {
-                _requestAtomicUpdate({
-                    set: {
-                        attribute: attribute,
-                        value: value
-                    },
-                    where: _where
-                });
-            } else {
-                console.error('You can\'t do atomic operations in non NUMBER attribute.');
             }
         }
 
@@ -823,24 +785,10 @@ function orangeLive(address) {
         // # Handle special operations like, atomic or push list operations
         function handleSpecialOperation(operation, data) {
             if (_isOwn()) {
-                //
-                var result = {
-                    key: data.key
-                };
-
                 // Get current data
-                var currentData = _dataSet[data.attribute];
+                var currentData = _.extend({}, _dataSet);
 
-                switch (operation) {
-                    case 'atomicUpdate':
-                        result[data.attribute] = parseInt(currentData) + parseInt(data.value);
-                        break
-                    case 'pushList':
-                        result[data.attribute] = _.uniq(currentData.concat(data.value).sort());
-                        break;
-                }
-
-                return result;
+                return _applySpecialOperation(operation, currentData, data);
             }
         }
 
@@ -881,6 +829,60 @@ function orangeLive(address) {
                 _.extend(_dataSet, data);
             }
         }
+
+        // # Update Atomic
+        function _updateAtomic(value, attribute) {
+            // If no attribute, try get from address params
+            if (!attribute) {
+                attribute = addressParams.attribute;
+            }
+
+            var atomicSet = {};
+            atomicSet[attribute] = value;
+
+            // test if is number
+            if (_.isNumber(_dataSet[attribute])) {
+                _requestUpdate({
+                    set: atomicSet,
+                    special: 'atomic',
+                    where: _where
+                });
+            } else {
+                console.error('You can\'t make atomic operations in non NUMBER attribute.');
+            }
+        }
+    }
+
+    // # Apply Special Operation
+    function _applySpecialOperation(operation, currentData, newData) {
+        //
+        var result = false;
+
+        switch (operation) {
+            case 'atomic':
+                result = _.extend(currentData, newData, function (currentData, data) {
+                    if (_.isNumber(currentData) && _.isNumber(data)) {
+                        return currentData + data;
+                    }
+
+                    return currentData;
+                });
+                break
+            case 'push':
+                result = _.extend(currentData, newData, function (currentData, data) {
+                    if (_.isArray(currentData) && !_.isArray(data)) {
+                        // Push
+                        currentData.push(data);
+                        // Apply unicity and sort
+                        return _.uniq(currentData.sort());
+                    }
+
+                    return currentData;
+                });
+                break;
+        }
+
+        return result;
     }
 
     // # Remove Non Selected
@@ -902,48 +904,10 @@ function orangeLive(address) {
     function _request(operation, params) {
         // Extend params with namespace and indexes
         params = _.extend(params || {}, {
-            address: address,
             indexes: indexes
         });
 
-        // Validate requests to avoid consecutive heavy operations
-        if (_requestValidation(operation)) {
-            socket.emit('request', operation, params);
-        }
-    }
-
-    // # Protects against continuous requests
-    function _requestValidation(operation) {
-        //
-        var now = +new Date;
-        var valid = !!(now - timers.lastOperation > timers.operationRateLimit);
-
-        // Exceptions
-        switch (operation) {
-            case 'join':
-            case 'stream':
-                // Always valid
-                return true
-                break;
-        }
-
-        // Store last operation timestamp
-        timers.lastOperation = now;
-
-        // Throw message error
-        if (!valid) {
-            console.error('You might call %s operations once each %s ms.', operation, timers.operationRateLimit);
-        }
-
-        return valid;
-    }
-
-    // # Request Atomic Update
-    function _requestAtomicUpdate(params) {
-        _request('atomicUpdate', {
-            set: params.set,
-            where: params.where
-        });
+        socket.emit('request', operation, params);
     }
 
     // # Request Insert
@@ -959,14 +923,6 @@ function orangeLive(address) {
         _request('item', {
             consistent: params.consistent,
             select: params.select,
-            where: params.where
-        });
-    }
-
-    // # Request Push List
-    function _requestPushList(params) {
-        _request('pushList', {
-            set: params.set,
             where: params.where
         });
     }
@@ -995,6 +951,7 @@ function orangeLive(address) {
         _request('update', {
             priority: params.priority,
             set: params.set,
+            special: params.special,
             where: params.where
         });
     }

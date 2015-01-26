@@ -196,7 +196,7 @@ var helpers = {
         return {
             string: {S: attr || '[:null]'},
             boolean: {BOOL: attr || false},
-            number: {N: attr.toString() || '0'}
+            number: {N: attr ? attr.toString() : '0'}
         }[typeof attr];
     },
     decodeList: function (list) {

@@ -71,7 +71,6 @@ function _createTables() {
 
 // # Insert
 function insert(params) {
-
     var insert = dynamodb.insert.item('tblLive1');
 
     if (params.alias)

@@ -44,7 +44,7 @@ module.exports = function (grunt) {
         // Shell
         shell: {
             lodash: {
-                command: 'lodash include=each,extend,findIndex,uniq,sortBy,isArray,isFunction,isNumber,isEmpty -m'
+                command: 'lodash include=each,extend,findIndex,uniq,sortBy,isArray,isFunction,isNumber,isEmpty,isUndefined,omit -m'
             },
             rmDist: {
                 command: 'rm -rf client/dist'

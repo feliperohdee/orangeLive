@@ -18,8 +18,7 @@ function __construct() {
         socket.on('request', function (operation, params) {
             if (live[operation]) {
                 live[operation](params).catch(function (err) {
-                    // Error response
-                    live.sendError(params, 'tech:' + operation, err);
+                    live.sendError('general:' + operation, err);
                 });
             }
         });
@@ -193,9 +192,14 @@ function orangeLive(namespace, socket) {
             return insertParams;
         }).then(function (insertParams) {
             // Sync Data
-            base.insert(insertParams).catch(function (err) {
-                sendError(params, 'sync:insert', err);
-            });
+            try {
+                base.insert(insertParams).catch(function (err) {
+                    sendError('sync:insert', err);
+                });
+            } catch (err) {
+                sendError('technical:insert', err);
+            }
+
         });
     }
 
@@ -231,7 +235,13 @@ function orangeLive(namespace, socket) {
             return itemParams;
         }).then(function (itemParams) {
             // Fetch item
-            return base.item(itemParams);
+            try {
+                return base.item(itemParams).catch(function (err) {
+                    sendError('sync:item', err);
+                });
+            } catch (err) {
+                sendError('technical:item', err);
+            }
         }).then(function (result) {
             // Normalize data and send
             result.data = _normalizeReponseData(result.data);
@@ -382,7 +392,13 @@ function orangeLive(namespace, socket) {
             return queryParams;
         }).then(function (queryParams) {
             // Fetch query 
-            return base.query(queryParams);
+            try {
+                return base.query(queryParams).catch(function (err) {
+                    sendError('sync:query', err);
+                });
+            } catch (err) {
+                sendError('technical:query', err);
+            }
         }).then(function (result) {
             // Normalize data
             result.data = _.map(result.data, function (data) {
@@ -599,11 +615,16 @@ function orangeLive(namespace, socket) {
 
             // Just a update function definition
             function updateBase() {
-                base.update(updateParams).catch(function (err) {
-                    var operation = 'update' + (params.special ? ':' + params.special : '');
+                //
+                var operation = 'update' + (params.special ? ':' + params.special : '');
 
-                    sendError(params, 'sync:' + operation, err);
-                });
+                try {
+                    base.update(updateParams).catch(function (err) {
+                        sendError('sync:' + operation, err);
+                    });
+                } catch (err) {
+                    sendError('technical:' + operation, err);
+                }
             }
         });
     }

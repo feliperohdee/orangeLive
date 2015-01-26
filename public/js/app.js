@@ -1,8 +1,8 @@
 // # App
 //var instance = orangeLive('*').select('name, height, age').useIndex('height');
-var instance = orangeLive('dlBSd$ib89$Be2/users/rohde5/array').on('load', function (data, count, pagination) {
-    console.log('instance 1', data);
-    console.log('instance 1 count', count);
+var instance = orangeLive('dlBSd$ib89$Be2/users/rohde1/map.age').on('load', function (data, count, pagination) {
+    //console.log('instance 1', data);
+    //console.log('instance 1 count', count);
 
     if (pagination && pagination.prev) {
         $('#prev').removeAttr('disabled');
@@ -29,78 +29,84 @@ var instance = orangeLive('dlBSd$ib89$Be2/users/rohde5/array').on('load', functi
             }
         });
     } else {
-        setTimeout(function () {
-            data.save({
-                age: data.value('age') + 1
-            });
-        }, 1000);
+        /*
+         setTimeout(function () {
+         data.save({
+         age: data.value('age') + 1
+         });
+         }, 1000);
+         */
     }
 
     updateView(data);
 }).on('save', function (data) {
-    console.log('instance 1 On save Event', data);
+    //console.log('instance 1 On save Event', data);
 }).on('save:update', function (data) {
-    console.log('instance 1 On save update Event', data);
+    //console.log('instance 1 On save update Event', data);
 }).on('fetch', function (data) {
-    console.log('instance 1 On fetch Event', data);
+    //console.log('instance 1 On fetch Event', data);
     updateView(data);
-}).on('stream', function(data){
-    console.log('instance 1 On stream Event', data);
-});
-
-setTimeout(function(){
-    instance.stream({
-        event: 'huahukdh dkjewhdqwjd',
-        data: 'helkdqwh dqqdlihqw doiqwdhwy'
-    });
-}, 500);
-
-var instance2 = orangeLive('dlBSd$ib89$Be2/users/rohde5').on('load', function (data) {
-    console.log('instance 2', data);
-}).on('save', function (data) {
-    console.log('instance 2 On save Event', data);
+}).on('stream', function (data) {
+    //console.log('instance 1 On stream Event', data);
 });
 
 function add() {
     instance.save({
-        key: '-ci56s0mnc0004bmnrg8totgzf',
+        key: 'rohde5',
         name: 'Rohde Test',
         height: getRandomInt(10, 90),
         age: getRandomInt(105, 110),
         address: 'floripa',
         array: ['c', 'b'],
         map: {
+            age: 0,
             name: 'Heron'
         }
     });
 }
 
-function increment() {
-    instance2.increment(1, 'age');
-}
-
-function decrement() {
-    instance2.decrement(1, 'age');
-}
+var instance2 = orangeLive('dlBSd$ib89$Be2/users/rohde1/age').on('load', function (data) {
+    //console.log('instance 2', data);
+}).on('save', function (data) {
+    //console.log('instance 2 On save Event', data);
+});
 
 function update() {
+/*
     instance2.save({
         name: 'Rohde Test',
         height: getRandomInt(10, 90),
         age: getRandomInt(105, 110),
         address: 'floripa',
-        array: ['c']
+        array: ['c'],
+        map: {
+            age: 100
+        }
+    });
+    */
+    instance2.save({
+        map: {
+            age: 101
+        }
     });
 }
 
+function increment() {
+    instance2.increment('map.age', 1);
+}
+
+function decrement() {
+    instance2.decrement('map.age', 1);
+}
+
 function pushList() {
-    instance2.pushList('pqno', 'array');
+    instance2.pushList('array','pqno');
 }
 
 var instance3 = orangeLive('dlBSd$ib89$Be2/users/rohde5').on('load', function (data) {
-    console.log('instance 3', data);
+    //console.log('instance 3', data);
 }).on('save', function (data) {
-    console.log('instance 3 On save Event', data);
+    //console.log('instance 3 On save Event', data);
 });
 
 

@@ -4,8 +4,7 @@ function orangeLive(address) {
     'use strict';
 
     var addressParams = {
-        key: address.split('/')[2] || false,
-        attribute: address.split('/')[3] || false
+        key: address.split('/')[2] || false
     };
 
     var indexes = {
@@ -15,8 +14,6 @@ function orangeLive(address) {
 
     var instance;
     var isCollection = false;
-    var lastChangeTransaction = false;
-    var lastStream = false;
 
     var socket = io({
         forceNew: true,
@@ -52,22 +49,18 @@ function orangeLive(address) {
         socket.on('responseSuccess', function (operation, result) {
             switch (operation) {
                 case 'broadcast:insert':
-                    // Set last change transaction
-                    lastChangeTransaction = result;
                     // Update Collection Dataset
                     if (isCollection) {
                         instance.saveDataSet(result);
                         // Dispatch Events [fetch, save, save:insert]
-                        dispatchEvents(['fetch', 'save', 'save:insert']);
+                        dispatchEvents(['fetch', 'save', 'save:insert'], result);
                     }
                     break;
                 case 'broadcast:update':
-                    // Set last change transaction
-                    lastChangeTransaction = result;
                     // Update Collection/Item Dataset
                     instance.saveDataSet(result);
                     // Dispatch Events [fetch, save, save:update]
-                    dispatchEvents(['fetch', 'save', 'save:update']);
+                    dispatchEvents(['fetch', 'save', 'save:update'], result);
                     break;
                 case 'broadcast:update:atomic':
                 case 'broadcast:update:push':
@@ -76,26 +69,22 @@ function orangeLive(address) {
                     var value = instance.handleSpecialOperation(specialOperation, result);
 
                     if (value) {
-                        // Set last change transaction
-                        lastChangeTransaction = value;
                         // Update Collection/Item Dataset
                         instance.saveDataSet(value);
                         // Dispatch Events [fetch, save, save:update]
-                        dispatchEvents(['fetch', 'save', 'save:update']);
+                        dispatchEvents(['fetch', 'save', 'save:update'], value);
                     }
                     break;
                 case 'broadcast:stream':
-                    // Set last stream
-                    lastStream = result;
                     // Dispatch Events
-                    dispatchEvents(['stream']);
+                    dispatchEvents(['stream'], result);
                     break;
                 case 'sync:item':
                 case 'sync:query':
                     // Load Data
                     instance.load(result);
                     // Dispatch Events
-                    dispatchEvents(['load']);
+                    dispatchEvents(['load'], result.data);
                     break;
                 default:
                     console.log(operation, result);
@@ -462,7 +451,7 @@ function orangeLive(address) {
                 // (collection.save might insert or update)
                 if (dataIndex >= 0) {
                     // Update Item
-                    console.log(data); // <======== *
+                    //console.log(data); // <======== TODO
                     _.extend(_dataSet[dataIndex], data);
                 } else {
                     // Push Item
@@ -551,17 +540,17 @@ function orangeLive(address) {
     }
 
     // # Dispatch Event
-    function dispatchEvents(events) {
-        //Fetch dataset
-        var dataSet = instance.getDataSet();
-
+    function dispatchEvents(events, data) {
         _.each(events, function (event) {
             // Get callback
-            var callback = instance.getCallback(event);
+            var callback = instance.getCallback(event, data);
 
             if (callback) {
                 switch (event) {
                     case 'load':
+                        //Fetch dataset
+                        var dataSet = instance.getDataSet();
+
                         if (isCollection) {
                             // Collection throw dataset, count, and pagination on load
                             var count = instance.getCount();
@@ -576,14 +565,14 @@ function orangeLive(address) {
                     case 'save':
                     case 'save:insert':
                     case 'save:update':
-                        // When event is save, throw just last transaction data changed
-                        callback(lastChangeTransaction);
-                        break;
                     case 'stream':
-                        // Throw just stream data
-                        callback(lastStream);
+                        // When event is save, throw just last transaction data
+                        callback(data);
                         break;
                     default:
+                        //Fetch dataset
+                        var dataSet = instance.getDataSet();
+
                         // Otherwise throw just dataset
                         callback(dataSet);
                 }
@@ -596,7 +585,7 @@ function orangeLive(address) {
         //
         var _dataSet = [];
         var _events = {};
-        var _select = addressParams.attribute;
+        var _select = false;
         var _where = addressParams.key;
 
         return{
@@ -629,13 +618,13 @@ function orangeLive(address) {
             /*--------------------------------------*/
 
             // # Decrement, ALIAS for -atomicUpdate
-            function decrement(value, attribute) {
-                _requestSpecialUpdate('atomic', -Math.abs(value || 1), attribute);
+            function decrement(attribute, value) {
+                _requestSpecialUpdate('atomic', attribute, -Math.abs(value || 1));
             }
 
             // # Increment, ALIAS for +atomicUpdate
-            function increment(value, attribute) {
-                _requestSpecialUpdate('atomic', Math.abs(value || 1), attribute);
+            function increment(attribute, value) {
+                _requestSpecialUpdate('atomic', attribute, Math.abs(value || 1));
             }
 
             // # On
@@ -647,10 +636,10 @@ function orangeLive(address) {
 
                 return this;
             }
-            
+
             // # Push List
-            function pushList(value, attribute) {
-                _requestSpecialUpdate('push', value, attribute);
+            function pushList(attribute, value) {
+                _requestSpecialUpdate('push', attribute, value);
             }
 
             // # Save {insert (via update operation) or update}
@@ -667,9 +656,9 @@ function orangeLive(address) {
                     console.log('saveWithCondition operation must have a callback FUNCTION.');
                 }
 
-                // If no attribute, try get from address params
+                // If no attribute, try get from _select
                 if (!attribute) {
-                    attribute = addressParams.attribute;
+                    attribute = _select;
                 }
 
                 // Extend dataset to result, result is gonna be changed if expression evaluates
@@ -710,8 +699,8 @@ function orangeLive(address) {
         }
 
         // # Get Callback {test if data belongs to item and return callback is exists}
-        function getCallback(event) {
-            if (isOwn()) {
+        function getCallback(event, data) {
+            if (isOwn(data)) {
                 return _events[event];
             }
 
@@ -725,7 +714,7 @@ function orangeLive(address) {
 
         // # Handle special operations like, atomic or push list operations
         function handleSpecialOperation(operation, data) {
-            if (isOwn()) {
+            if (isOwn(data)) {
                 // Get current data
                 var currentData = _.extend({}, _dataSet);
 
@@ -733,13 +722,9 @@ function orangeLive(address) {
             }
         }
 
-        // # Is Own {test if a lastChangeTransaction.key belongs to displayed item}
-        function isOwn() {
-            if (lastChangeTransaction) {
-                return addressParams.key === lastChangeTransaction.key;
-            }
-
-            return addressParams.key === _dataSet.key;
+        // # Is Own {test if a key belongs to displayed item}
+        function isOwn(data) {
+            return addressParams.key === data.key;
         }
 
         // # Load
@@ -767,23 +752,21 @@ function orangeLive(address) {
         }
 
         // # Request Special Update
-        function _requestSpecialUpdate(special, value, attribute) {
-            // If no attribute, try get from address params
-            if (!attribute) {
-                attribute = addressParams.attribute;
-            }
+        function _requestSpecialUpdate(special, attribute, value) {
+            // Resolve path and get current value
+            var currentValue = getObjectValue(_dataSet, attribute);
 
             switch (special) {
                 case 'atomic':
                     // test if is number
-                    if (!_.isNumber(_dataSet[attribute])) {
-                        console.error('You can\'t make atomic operations into a NON number.');
+                    if (!_.isNumber(currentValue)) {
+                        console.error('You can\'t make atomic operations into a NON number attribute.');
                         return;
                     }
                     break;
                 case 'push':
                     // test if is array
-                    if (!_.isArray(_dataSet[attribute])) {
+                    if (!_.isArray(currentValue)) {
                         console.error('You can\'t push into a non ARRAY attribute.');
                         return;
                     }
@@ -804,7 +787,7 @@ function orangeLive(address) {
 
         // # Save Datset
         function saveDataSet(data) {
-            if (isOwn()) {
+            if (isOwn(data)) {
                 // If select, remove extras
                 if (_select) {
                     data = removeNonSelected(data, _select);
@@ -817,22 +800,22 @@ function orangeLive(address) {
     }
 
     // # Apply Special Operation
-    function applySpecialOperation(operation, currentData, newData) {
+    function applySpecialOperation(operation, currentData, data) {
         //
         var result = false;
+        var attribute = _.keys(_.omit(data, 'key'))[0];
+        var value = data[attribute];
 
         switch (operation) {
             case 'atomic':
-                result = _.extend(currentData, newData, function (currentData, data) {
-                    if (_.isNumber(currentData) && _.isNumber(data)) {
-                        return currentData + data;
-                    }
+                value = getObjectValue(currentData, attribute) + value;
 
-                    return currentData;
-                });
+                result = setObjectValue(currentData, attribute, value);
                 break
             case 'push':
-                result = _.extend(currentData, newData, function (currentData, data) {
+                // TODO
+
+                result = _.extend(currentData, data, function (currentData, data) {
                     if (_.isArray(currentData) && !_.isArray(data)) {
                         // Push
                         currentData.push(data);
@@ -861,19 +844,56 @@ function orangeLive(address) {
                 saveFn(set, priority);
             },
             value: function (key) {
-                // extend and remove key
-                var extValue = _.extend({}, data);
-                delete extValue.key;
-
-                return key ? extValue[key] : extValue;
+                return _.omit(key ? data[key] : data, 'key');
             }
         };
+    }
+
+    // Fetch value from object with or without dotted path
+    function getObjectValue(obj, attribute) {
+        if (attribute.indexOf('.') >= 0) {
+            // Handle dotted path
+            var path = attribute.split('.');
+
+            _.each(path, function (path) {
+                obj = !_.isUndefined(obj) ? obj[path] : false;
+            });
+        } else {
+            // Handle simple path
+            obj = obj[attribute];
+        }
+
+        return obj;
+    }
+
+    // Set value to object with or without dotted path
+    function setObjectValue(obj, attribute, value) {
+        if (attribute.indexOf('.') >= 0) {
+            // Handle dotted path
+            var i;
+            var path = attribute.split('.');
+            var reference;
+
+            for (i = 0; i < path.length - 1; i++) {
+                reference = obj[path[i]];
+            }
+
+            reference[path[i]] = value;
+        } else {
+            // Handle simple path
+            obj[attribute] = value;
+        }
+
+        return obj;
     }
 
     // # Remove Non Selected
     function removeNonSelected(data, select) {
         //
         var result = {};
+
+        // Remove paths
+        select = select.split('.')[0];
 
         _.each(data, function (value, key) {
             // If key belong to slect, and different of key
@@ -939,6 +959,17 @@ function orangeLive(address) {
             special: params.special,
             where: params.where
         });
+    }
+
+    // # Set Object Value {Resolve path and set value}
+    function setObjValue(obj, path, value) {
+        path = path.split('.');
+
+        _.each(path, function (path) {
+            obj = !_.isUndefined(obj) ? obj[path] : false;
+        });
+
+        obj = value;
     }
 
     // Shared API either item and collection

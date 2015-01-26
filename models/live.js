@@ -29,7 +29,7 @@ function __construct() {
 // # Orange Live
 function orangeLive(namespace, socket) {
     //
-    var lastUpdate = 0;
+    var updateTimeout = 0;
 
     return{
         insert: insert,
@@ -246,10 +246,7 @@ function orangeLive(namespace, socket) {
         return Promise.try(function () {
             if (socket.rooms.indexOf(namespace) < 0) {
                 socket.join(namespace);
-                return true;
             }
-
-            return false;
         });
     }
 
@@ -295,8 +292,8 @@ function orangeLive(namespace, socket) {
             // Define Filter
             if (params.filters.length) {
                 //
-                var filterExpression = '';
-                var filterAlias = {};
+                queryParams.withFilter = '';
+                queryParams.alias = queryParams.alias || {};
 
                 _.each(params.filters, function (filter, index) {
                     //
@@ -308,63 +305,59 @@ function orangeLive(namespace, socket) {
 
                     switch (filter.operation) {
                         case 'attrExists':
-                            filterExpression += 'attribute_exists(' + alias.map.names[0] + ')';
+                            queryParams.withFilter += 'attribute_exists(' + alias.map.names[0] + ')';
                             break;
                         case 'attrNotExists':
-                            filterExpression += 'attribute_not_exists(' + alias.map.names[0] + ')';
+                            queryParams.withFilter += 'attribute_not_exists(' + alias.map.names[0] + ')';
                             break;
                         case 'beginsWith':
-                            filterExpression += 'begins_with(' + alias.map.names[0] + ', ' + alias.map.values[0] + ')';
+                            queryParams.withFilter += 'begins_with(' + alias.map.names[0] + ', ' + alias.map.values[0] + ')';
                             break;
                         case 'between':
-                            filterExpression += alias.map.names[0] + ' BETWEEN ' + alias.map.values[0] + ' AND ' + alias.map.values[1];
+                            queryParams.withFilter += alias.map.names[0] + ' BETWEEN ' + alias.map.values[0] + ' AND ' + alias.map.values[1];
                             break;
                         case 'contains':
-                            filterExpression += 'contains(' + alias.map.names[0] + ', ' + alias.map.values[0] + ')';
+                            queryParams.withFilter += 'contains(' + alias.map.names[0] + ', ' + alias.map.values[0] + ')';
                             break;
                         case 'equals':
-                            filterExpression += alias.map.names[0] + ' = ' + alias.map.values[0];
+                            queryParams.withFilter += alias.map.names[0] + ' = ' + alias.map.values[0];
                             break;
                         case 'greaterThan':
-                            filterExpression += alias.map.names[0] + ' >= ' + alias.map.values[0];
+                            queryParams.withFilter += alias.map.names[0] + ' >= ' + alias.map.values[0];
                             break;
                         case 'lessThan':
-                            filterExpression += alias.map.names[0] + ' <= ' + alias.map.values[0];
+                            queryParams.withFilter += alias.map.names[0] + ' <= ' + alias.map.values[0];
                             break;
                         case 'notEquals':
-                            filterExpression += alias.map.names[0] + ' <> ' + alias.map.values[0];
+                            queryParams.withFilter += alias.map.names[0] + ' <> ' + alias.map.values[0];
                             break;
                     }
 
                     // If morte than one filter, get next comparision
                     if (index < params.filters.length - 1) {
-                        filterExpression += params.filters[index + 1].or ? ' OR ' : ' AND ';
+                        queryParams.withFilter += params.filters[index + 1].or ? ' OR ' : ' AND ';
                     }
 
                     // Extend alias names
                     if (!_.isEmpty(alias.data.names)) {
                         //
-                        if (!filterAlias.names) {
-                            filterAlias.names = {};
+                        if (!queryParams.alias.names) {
+                            queryParams.alias.names = {};
                         }
 
-                        _.extend(filterAlias.names, alias.data.names);
+                        _.extend(queryParams.alias.names, alias.data.names);
                     }
 
                     // Extend alias values
                     if (!_.isEmpty(alias.data.values)) {
                         //
-                        if (!filterAlias.values) {
-                            filterAlias.values = {};
+                        if (!queryParams.alias.values) {
+                            queryParams.alias.values = {};
                         }
 
-                        _.extend(filterAlias.values, alias.data.values);
+                        _.extend(queryParams.alias.values, alias.data.values);
                     }
                 });
-
-                // Set filter alias and expression
-                queryParams.alias = filterAlias;
-                queryParams.withFilter = filterExpression;
             }
 
             return queryParams;
@@ -600,8 +593,8 @@ function orangeLive(namespace, socket) {
             if (params.special) {
                 updateBase();
             } else {
-                clearTimeout(lastUpdate);
-                lastUpdate = setTimeout(updateBase, 1000);
+                clearTimeout(updateTimeout);
+                updateTimeout = setTimeout(updateBase, 1000);
             }
 
             // Just a update function definition

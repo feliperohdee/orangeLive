@@ -845,7 +845,7 @@ function orangeLive(address) {
             }
         } else {
             // Handle simple path
-            obj = obj[attribute] || false;
+            obj = _.isUndefined(obj[attribute]) ? false : obj[attribute];
         }
 
         return obj;

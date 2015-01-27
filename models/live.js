@@ -633,11 +633,12 @@ function orangeLive(namespace, socket) {
     // - Replace _key for key
     // - Remove useless data for user
     function _normalizeReponseData(data) {
-        //
-        var _data = _.extend({}, data); // New reference is required to never influence in another operation
+        // New reference is required to never influence in another operation
+        var _data = _.clone(data); 
 
         if (_data._key) {
-            _data.key = data._key; // Replace _key for key
+            // Replace _key for key
+            _data.key = data._key;
         }
 
         delete _data._key;

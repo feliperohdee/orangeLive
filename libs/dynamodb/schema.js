@@ -178,7 +178,7 @@ function validateAbsoluteWhere(table, data) {
  */
 function validatePutData(table, data) {
     //create new data reference
-    var _data = _.extend({}, data);
+    var _data = _.clone(data);
     var schema = _get(table);
     var automaticKeyDefault = {
         S: '-' + cuid(),
@@ -233,7 +233,7 @@ function validatePutData(table, data) {
  */
 function validateUpdateData(table, data) {
     //create new data reference
-    var _data = _.extend({}, data);
+    var _data = _.clone(data);
     var schema = _get(table);
 
     if (schema) {

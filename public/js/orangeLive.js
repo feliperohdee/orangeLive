@@ -335,12 +335,10 @@ function orangeLive(address) {
         function handleSpecialOperation(operation, data) {
             // Fetch index from dataset
             var dataIndex = _.findIndex(_dataSet, {key: data.key});
-            var currentData = _dataSet[dataIndex];
 
             // Test if value belongs to actual dataset
             if (dataIndex >= 0) {
-                //
-                return applySpecialOperation(operation, currentData, data);
+                return applySpecialOperation(operation, _dataSet[dataIndex], data);
             }
 
             return false;
@@ -451,7 +449,6 @@ function orangeLive(address) {
                 // (collection.save might insert or update)
                 if (dataIndex >= 0) {
                     // Update Item
-                    //console.log(data); // <======== TODO
                     _.extend(_dataSet[dataIndex], data);
                 } else {
                     // Push Item
@@ -583,7 +580,7 @@ function orangeLive(address) {
     // # Item
     function item() {
         //
-        var _dataSet = [];
+        var _dataSet = {};
         var _events = {};
         var _select = false;
         var _where = addressParams.key;
@@ -650,34 +647,22 @@ function orangeLive(address) {
             }
 
             // # Save with Condition
-            function saveWithCondition(conditionFn, attribute, priority) {
+            function saveWithCondition(conditionFn, priority) {
                 // Validate function
                 if (!_.isFunction(conditionFn)) {
                     console.log('saveWithCondition operation must have a callback FUNCTION.');
                 }
 
-                // If no attribute, try get from _select
-                if (!attribute) {
-                    attribute = _select;
-                }
-
-                // Extend dataset to result, result is gonna be changed if expression evaluates
-                var currentData = _.extend({}, _dataSet);
-                var result = {};
-
-                // If there is attribute, pass just attribute data, otherwise all data
-                var fnResult = attribute ? conditionFn(currentData[attribute] || false) : conditionFn(!_.isEmpty(currentData) ? currentData : false);
+                // Execute conditionFn and get result
+                var fnResult = conditionFn(_dataSet);
 
                 if (fnResult) {
-                    // if there is attribute, compute result as a map, otherwise compute all result
-                    if (attribute) {
-                        result[attribute] = fnResult;
-                    } else {
-                        result = fnResult;
-                    }
+                    // Extend result with key
+                    fnResult = _.extend(fnResult, {
+                        key: _dataSet.key
+                    });
 
-                    // Save matching old data with result
-                    _requestSave(_.extend(currentData, result), priority);
+                    _requestSave(fnResult, priority);
                 } else {
                     console.error('Condition not reached at saveWithCondition operation.');
                 }
@@ -715,11 +700,10 @@ function orangeLive(address) {
         // # Handle special operations like, atomic or push list operations
         function handleSpecialOperation(operation, data) {
             if (isOwn(data)) {
-                // Get current data
-                var currentData = _.extend({}, _dataSet);
-
-                return applySpecialOperation(operation, currentData, data);
+                return applySpecialOperation(operation, _dataSet, data);
             }
+
+            return false;
         }
 
         // # Is Own {test if a key belongs to displayed item}
@@ -800,35 +784,33 @@ function orangeLive(address) {
     }
 
     // # Apply Special Operation
-    function applySpecialOperation(operation, currentData, data) {
+    function applySpecialOperation(operation, dataSet, data) {
         //
-        var result = false;
         var attribute = _.keys(_.omit(data, 'key'))[0];
         var value = data[attribute];
 
-        switch (operation) {
-            case 'atomic':
-                value = getObjectValue(currentData, attribute) + value;
+        // Deep dataset clone
+        var dataSetClone = _.clone(dataSet, true);
+        var currentValue = getObjectValue(dataSetClone, attribute);
 
-                result = setObjectValue(currentData, attribute, value);
-                break
-            case 'push':
-                // TODO
+        if (currentValue) {
+            switch (operation) {
+                case 'atomic':
+                    var sum = currentValue + value;
 
-                result = _.extend(currentData, data, function (currentData, data) {
-                    if (_.isArray(currentData) && !_.isArray(data)) {
-                        // Push
-                        currentData.push(data);
-                        // Apply unicity and sort
-                        return _.uniq(currentData.sort());
-                    }
+                    return setObjectValue(dataSetClone, attribute, sum);
+                    break
+                case 'push':
+                    var newList = currentValue;
+                    newList.push(value);
+                    newList = _.uniq(newList.sort());
 
-                    return currentData;
-                });
-                break;
+                    return setObjectValue(dataSetClone, attribute, newList);
+                    break;
+            }
         }
 
-        return result;
+        return false;
     }
 
     // # Format Dataset
@@ -844,7 +826,7 @@ function orangeLive(address) {
                 saveFn(set, priority);
             },
             value: function (key) {
-                return _.omit(key ? data[key] : data, 'key');
+                return key ? data[key] : _.omit(data, 'key');
             }
         };
     }
@@ -855,9 +837,12 @@ function orangeLive(address) {
             // Handle dotted path
             var path = attribute.split('.');
 
-            _.each(path, function (path) {
-                obj = !_.isUndefined(obj) ? obj[path] : false;
-            });
+            while (path.length > 0) {
+                var shift = path.shift();
+
+                // Important test undefined, because 0 might be false
+                obj = _.isUndefined(obj[shift]) ? false : obj[shift];
+            }
         } else {
             // Handle simple path
             obj = obj[attribute];
@@ -868,23 +853,31 @@ function orangeLive(address) {
 
     // Set value to object with or without dotted path
     function setObjectValue(obj, attribute, value) {
+        // Reference to return
+        var reference = obj;
+
         if (attribute.indexOf('.') >= 0) {
             // Handle dotted path
-            var i;
             var path = attribute.split('.');
-            var reference;
 
-            for (i = 0; i < path.length - 1; i++) {
-                reference = obj[path[i]];
+            while (path.length > 1) {
+                var shift = path.shift();
+
+                // If not exists, create it
+                if (!obj[shift]) {
+                    obj[shift] = {};
+                }
+
+                obj = obj[shift];
             }
 
-            reference[path[i]] = value;
+            obj[path.shift()] = value;
         } else {
             // Handle simple path
             obj[attribute] = value;
         }
 
-        return obj;
+        return reference;
     }
 
     // # Remove Non Selected
@@ -959,17 +952,6 @@ function orangeLive(address) {
             special: params.special,
             where: params.where
         });
-    }
-
-    // # Set Object Value {Resolve path and set value}
-    function setObjValue(obj, path, value) {
-        path = path.split('.');
-
-        _.each(path, function (path) {
-            obj = !_.isUndefined(obj) ? obj[path] : false;
-        });
-
-        obj = value;
     }
 
     // Shared API either item and collection

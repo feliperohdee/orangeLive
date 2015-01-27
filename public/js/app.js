@@ -1,6 +1,6 @@
 // # App
 //var instance = orangeLive('*').select('name, height, age').useIndex('height');
-var instance = orangeLive('dlBSd$ib89$Be2/users').select('map.stats.clicks').on('load', function (data, count, pagination) {
+var instance = orangeLive('dlBSd$ib89$Be2/users').on('load', function (data, count, pagination) {
     //console.log('instance 1', data);
     //console.log('instance 1 count', count);
 

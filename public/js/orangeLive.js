@@ -826,7 +826,7 @@ function orangeLive(address) {
                 saveFn(set, priority);
             },
             value: function (key) {
-                return key ? data[key] : _.omit(data, 'key');
+                return key ? getObjectValue(data, key) : _.omit(data, 'key');
             }
         };
     }
@@ -845,7 +845,7 @@ function orangeLive(address) {
             }
         } else {
             // Handle simple path
-            obj = obj[attribute];
+            obj = obj[attribute] || false;
         }
 
         return obj;

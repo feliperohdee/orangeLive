@@ -444,7 +444,7 @@ function orangeLive(address) {
             // Get index
             var dataIndex = _.findIndex(_dataSet, {key: data.key});
 
-            if (testWhere(data)) {
+            if (testWhere(data) && testFilter(data)) {
                 // Test OK, update data if key already exists, otherwise push
                 // (collection.save might insert or update)
                 if (dataIndex >= 0) {
@@ -483,6 +483,75 @@ function orangeLive(address) {
             return data;
         }
 
+        // # Test Filter Conditions
+        function testFilter(data) {
+            // If no where, always pass
+            if (!_filters) {
+                return true;
+            }
+
+            var results = [];
+
+            _.each(_filters, function (filter, index) {
+                var testCase = filter.operation;
+                var testValue = filter.value;
+                var testedValue = getObjectValue(data, filter.attribute);
+                var notNull = !_.isNull(testedValue);
+
+                results[index] = {
+                    or: !!filter.or
+                };
+
+                switch (testCase) {
+                    // Attr exists test
+                    case 'attrExists':
+                        results[index].value = !!testedValue;
+                        break;
+                        // Attr not exists test
+                    case 'attrNotExists':
+                        results[index].value = !testedValue;
+                        break;
+                        // Begins with test
+                    case 'beginsWith':
+                        results[index].value = !!(notNull && testedValue.toLowerCase().indexOf(testValue.toLowerCase()) === 0);
+                        break;
+                        // Between test
+                    case 'between':
+                        results[index].value = !!(notNull && testedValue >= testValue[0] && testedValue <= testValue[1]);
+                        break;
+                        // Contains test
+                    case 'contains':
+                        results[index].value = !!(notNull && testedValue.toLowerCase().indexOf(testValue.toLowerCase()) >= 0);
+                        break;
+                        // Equals test
+                    case 'equals':
+                        results[index].value = !!(notNull && testedValue === testValue);
+                        break;
+                        // Greater than test
+                    case 'greaterThan':
+                        results[index].value = !!(notNull && testedValue >= testValue);
+                        break;
+                        // Less than test
+                    case 'lessThan':
+                        results[index].value = !!(notNull && testedValue <= testValue);
+                        break;
+                        // Not equals test
+                    case 'notEquals':
+                        results[index].value = !!(notNull && testedValue !== testValue);
+                        break;
+                }
+            });
+
+            // Analyze results
+            var isOr = _.some(results, 'or');
+
+            if (isOr) {
+                return _.some(results, 'value');
+            } else {
+                return _.every(results, 'value');
+            }
+        }
+
         // # Test Where Conditions
         function testWhere(data) {
             // If no where, always pass
@@ -490,49 +559,50 @@ function orangeLive(address) {
                 return true;
             }
 
-            var result = false;
             var testCase = _where[0];
             var testValue = _where[1];
-            var testAttr = _index || 'key';
-
+            //
             if (_where[2]) {
                 testValue = [_where[1], _where[2]];
             }
+            
+            var testedValue = getObjectValue(data, _index || 'key');
+            var notNull = !_.isNull(testedValue);
 
             switch (testCase) {
                 // Between test
                 case '~':
-                    if (data[testAttr] >= testValue[0] && data[testAttr] <= testValue[1]) {
-                        result = true;
+                    if (notNull && testedValue >= testValue[0] && testedValue <= testValue[1]) {
+                        return true;
                     }
                     break;
                     // Equals test
                 case '=':
-                    if (data[testAttr] === testValue) {
-                        result = true;
+                    if (notNull && testedValue === testValue) {
+                        return true;
                     }
                     break;
                     // Less then test
                 case '<=':
-                    if (data[testAttr] <= testValue) {
-                        result = true;
+                    if (notNull && testedValue <= testValue) {
+                        return true;
                     }
                     break;
                     // Greatest then test
                 case '>=':
-                    if (data[testAttr] >= testValue) {
-                        result = true;
+                    if (notNull && testedValue >= testValue) {
+                        return true;
                     }
                     break;
                     // Starts with test
                 case '^':
-                    if (data[testAttr].toLowerCase().indexOf(testValue.toLowerCase()) === 0) {
-                        result = true;
+                    if (notNull && testedValue.toLowerCase().indexOf(testValue.toLowerCase()) === 0) {
+                        return true;
                     }
                     break;
             }
 
-            return result;
+            return false;
         }
     }
 
@@ -540,7 +610,7 @@ function orangeLive(address) {
     function dispatchEvents(events, data) {
         _.each(events, function (event) {
             // Get callback
-            var callback = instance.getCallback(event, data);
+            var callback = instance.getCallback(event);
 
             if (callback) {
                 switch (event) {
@@ -684,12 +754,8 @@ function orangeLive(address) {
         }
 
         // # Get Callback {test if data belongs to item and return callback is exists}
-        function getCallback(event, data) {
-            if (isOwn(data)) {
-                return _events[event];
-            }
-
-            return false;
+        function getCallback(event) {
+            return _events[event];
         }
 
         // # Get Dataset
@@ -699,16 +765,7 @@ function orangeLive(address) {
 
         // # Handle special operations like, atomic or push list operations
         function handleSpecialOperation(operation, data) {
-            if (isOwn(data)) {
-                return applySpecialOperation(operation, _dataSet, data);
-            }
-
-            return false;
-        }
-
-        // # Is Own {test if a key belongs to displayed item}
-        function isOwn(data) {
-            return addressParams.key === data.key;
+            return applySpecialOperation(operation, _dataSet, data);
         }
 
         // # Load
@@ -771,15 +828,13 @@ function orangeLive(address) {
 
         // # Save Datset
         function saveDataSet(data) {
-            if (isOwn(data)) {
-                // If select, remove extras
-                if (_select) {
-                    data = removeNonSelected(data, _select);
-                }
-
-                // Update Item
-                _.extend(_dataSet, data);
+            // If select, remove extras
+            if (_select) {
+                data = removeNonSelected(data, _select);
             }
+
+            // Update Item
+            _.extend(_dataSet, data);
         }
     }
 
@@ -793,7 +848,7 @@ function orangeLive(address) {
         var dataSetClone = _.clone(dataSet, true);
         var currentValue = getObjectValue(dataSetClone, attribute);
 
-        if (currentValue) {
+        if (!_.isNull(currentValue)) {
             switch (operation) {
                 case 'atomic':
                     var sum = currentValue + value;
@@ -840,12 +895,20 @@ function orangeLive(address) {
             while (path.length > 0) {
                 var shift = path.shift();
 
+                if (_.isUndefined(obj[shift])) {
+                    return null;
+                }
+
                 // Important test undefined, because 0 might be false
-                obj = _.isUndefined(obj[shift]) ? false : obj[shift];
+                obj = obj[shift];
             }
         } else {
             // Handle simple path
-            obj = _.isUndefined(obj[attribute]) ? false : obj[attribute];
+            if (_.isUndefined(obj[attribute])) {
+                return null;
+            }
+
+            obj = obj[attribute];
         }
 
         return obj;

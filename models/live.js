@@ -11,8 +11,8 @@ __construct();
 function __construct() {
     io.on('connection', function (socket) {
         // Resolve namespace from address
-        var namespace = resolveNamespace(socket.handshake.query.address);
-        var live = orangeLive(namespace, socket);
+        var address = resolveAddress(socket.handshake.query.address);
+        var live = orangeLive(address, socket);
 
         // # Request
         socket.on('request', function (operation, params) {
@@ -25,8 +25,13 @@ function __construct() {
     });
 }
 
+// # Is subscribers
+function isSubscribers(room) {
+    return !!(io.nsps['/'].adapter.rooms[room]) || false;
+}
+
 // # Orange Live
-function orangeLive(namespace, socket) {
+function orangeLive(address, socket) {
     //
     var updateTimeout = 0;
 
@@ -167,7 +172,7 @@ function orangeLive(namespace, socket) {
             // Build Insert params
             return {
                 set: _.extend(params.set, {
-                    _namespace: namespace,
+                    _namespace: address.namespace,
                     _key: params.set.key || '-' + cuid() // Generate new key if no one provided
                 })
             };
@@ -209,7 +214,7 @@ function orangeLive(namespace, socket) {
             // Define item params
             return {
                 where: {
-                    _namespace: namespace
+                    _namespace: address.namespace
                 }
             };
         }).then(function (itemParams) {
@@ -252,10 +257,13 @@ function orangeLive(namespace, socket) {
 
     // # Join Operation
     function join() {
-        // Join new namespace, if not connected yet
+        // Join new address, if not connected yet
         return Promise.try(function () {
-            if (socket.rooms.indexOf(namespace) < 0) {
-                socket.join(namespace);
+            // Join in full address
+            var join = address.namespace + (address.key ? '/' + address.key : '');
+
+            if (socket.rooms.indexOf(join) < 0) {
+                socket.join(join);
             }
         });
     }
@@ -270,7 +278,7 @@ function orangeLive(namespace, socket) {
                 limit: params.limit,
                 startAt: params.startAt,
                 where: {
-                    _namespace: ['=', namespace]
+                    _namespace: ['=', address.namespace]
                 }
             };
         }).then(function (queryParams) {
@@ -411,17 +419,26 @@ function orangeLive(namespace, socket) {
 
     // # Send Broadcast
     function _sendBroadcast(operation, data) {
+        // Always broadcast whole namespace like {account + app / table}
         _socketResponse()
-                .all()
+                .to(address.namespace)
                 .operation('broadcast:' + operation)
                 .data(_normalizeReponseData(data));
+        
+        // If user joined using a key, send specially like {account + app / table / key}
+        if (address.key) {
+            _socketResponse()
+                    .to(address.namespace + '/' + address.key)
+                    .operation('broadcast:' + operation)
+                    .data(_normalizeReponseData(data));
+        }
     }
 
     // # Send error
     function sendError(operation, error) {
         // Error response
         _socketResponse()
-                .me()
+                .to(socket.id)
                 .operation(operation)
                 .error(error);
     }
@@ -430,7 +447,7 @@ function orangeLive(namespace, socket) {
     function _sendData(operation, data) {
         // Success response
         _socketResponse()
-                .me()
+                .to(socket.id)
                 .operation(operation)
                 .data(data);
     }
@@ -444,11 +461,10 @@ function orangeLive(namespace, socket) {
         setTimeout(_exec, 150);
 
         return{
-            all: all,
             data: data,
             operation: operation,
             error: error,
-            me: me
+            to: to
         };
 
         /*=============================*/
@@ -460,13 +476,6 @@ function orangeLive(namespace, socket) {
             } else {
                 io.to(responseParams.to).emit('responseSuccess', responseParams.operation, responseParams.data);
             }
-        }
-
-        // # All
-        function all() {
-            responseParams.to = namespace;
-
-            return this;
         }
 
         // # Data
@@ -491,8 +500,8 @@ function orangeLive(namespace, socket) {
         }
 
         // # Me
-        function me() {
-            responseParams.to = socket.id;
+        function to(to) {
+            responseParams.to = to;
 
             return this;
         }
@@ -528,7 +537,7 @@ function orangeLive(namespace, socket) {
             return {
                 set: params.set,
                 where: {
-                    _namespace: namespace,
+                    _namespace: address.namespace,
                     _key: params.where
                 }
             };
@@ -634,7 +643,7 @@ function orangeLive(namespace, socket) {
     // - Remove useless data for user
     function _normalizeReponseData(data) {
         // New reference is required to never influence in another operation
-        var _data = _.clone(data); 
+        var _data = _.clone(data);
 
         if (_data._key) {
             // Replace _key for key
@@ -653,10 +662,13 @@ function orangeLive(namespace, socket) {
     }
 }
 
-// # Resolve Namespace
-function resolveNamespace(address) {
+// # Resolve Address
+function resolveAddress(address) {
     // Split address
     address = address.split('/');
 
-    return address[0] + '/' + address[1];
+    return{
+        key: address[2] || false,
+        namespace: address[0] + '/' + address[1]
+    };
 }

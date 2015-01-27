@@ -379,7 +379,7 @@ function orangeLive(address) {
                 _startAt = _pagination.keys[_pagination.current];
 
                 // Get again
-                _get();
+                _requestCollection();
             }
         }
 
@@ -395,7 +395,7 @@ function orangeLive(address) {
                 _startAt = _pagination.keys[_pagination.current];
 
                 // Get again
-                _get();
+                _requestCollection();
             }
         }
 
@@ -565,7 +565,7 @@ function orangeLive(address) {
             if (_where[2]) {
                 testValue = [_where[1], _where[2]];
             }
-            
+
             var testedValue = getObjectValue(data, _index || 'key');
             var notNull = !_.isNull(testedValue);
 

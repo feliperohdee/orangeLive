@@ -1,6 +1,6 @@
 // # App
 //var instance = orangeLive('*').select('name, height, age').useIndex('height');
-var instance = orangeLive('dlBSd$ib89$Be2/users').where('age').select('age, map').greaterThan(100).on('load', function (data, count, pagination) {
+var instance = orangeLive('dlBSd$ib89$Be2/users').last(5).select('name, age, map.stats').where('age').on('load', function (data, count, pagination) {
     //console.log('instance 1', data);
     //console.log('instance 1 count', count);
 
@@ -24,7 +24,7 @@ var instance = orangeLive('dlBSd$ib89$Be2/users').where('age').select('age, map'
             if (item.key() === 'rohde5') {
                 setTimeout(function () {
                     item.save({
-                        age: item.value('age') + 1
+                        name: 'rohde Test'
                     });
                 }, 1000);
             }

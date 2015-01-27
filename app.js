@@ -46,3 +46,5 @@ app.use(middleware.errors.notFoundError);
 server.listen(process.env.PORT || 3000, function () {
     debug('Express server listening on port ' + server.address().port);
 });
+
+module.exports = app;

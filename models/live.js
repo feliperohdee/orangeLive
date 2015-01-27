@@ -10,6 +10,9 @@ __construct();
 
 function __construct() {
     io.on('connection', function (socket) {
+        
+        console.log('Client %s connected with process %s', socket.id, process.pid);
+        
         // Resolve namespace from address
         var address = resolveAddress(socket.handshake.query.address);
         var live = orangeLive(address, socket);
@@ -248,10 +251,12 @@ function orangeLive(address, socket) {
                 sendError('technical:item', err);
             }
         }).then(function (result) {
-            // Normalize data and send
-            result.data = _normalizeReponseData(result.data);
+            if (result) {
+                // Normalize data and send
+                result.data = _normalizeReponseData(result.data);
 
-            _sendData('sync:item', result);
+                _sendData('sync:item', result);
+            }
         });
     }
 
@@ -409,11 +414,13 @@ function orangeLive(address, socket) {
             }
         }).then(function (result) {
             // Normalize data
-            result.data = _.map(result.data, function (data) {
-                return _normalizeReponseData(data);
-            });
+            if (result) {
+                result.data = _.map(result.data, function (data) {
+                    return _normalizeReponseData(data);
+                });
 
-            _sendData('sync:query', result);
+                _sendData('sync:query', result);
+            }
         });
     }
 
@@ -424,7 +431,7 @@ function orangeLive(address, socket) {
                 .to(address.namespace)
                 .operation('broadcast:' + operation)
                 .data(_normalizeReponseData(data));
-        
+
         // If user joined using a key, send specially like {account + app / table / key}
         if (address.key) {
             _socketResponse()

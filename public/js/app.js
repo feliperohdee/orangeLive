@@ -1,6 +1,6 @@
 // # App
 //var instance = orangeLive('*').select('name, height, age').useIndex('height');
-var instance = orangeLive('dlBSd$ib89$Be2/users').last(5).select('name, age, map.stats').where('age').on('load', function (data, count, pagination) {
+var instance = new orangeLive('dlBSd$ib89$Be2/users').last(5).select('name, age, map.stats').where('age').on('load', function (data, count, pagination) {
     //console.log('instance 1', data);
     //console.log('instance 1 count', count);
 
@@ -68,7 +68,7 @@ function add() {
     });
 }
 
-var instance2 = orangeLive('dlBSd$ib89$Be2/users/rohde5').on('load', function (data) {
+var instance2 = new orangeLive('dlBSd$ib89$Be2/users/rohde5').on('load', function (data) {
     //console.log('instance 2', data.value());
 }).on('save', function (data) {
     //console.log('instance 2 On save Event', data);
@@ -102,7 +102,7 @@ function pushList() {
     instance2.pushList('array', 'pqno');
 }
 
-var instance3 = orangeLive('dlBSd$ib89$Be2/users/rohde1').on('load', function (data) {
+var instance3 = new orangeLive('dlBSd$ib89$Be2/users/rohde1').on('load', function (data) {
     //console.log('instance 3', data);
 }).on('save', function (data) {
     //console.log('instance 3 On save Event', data);

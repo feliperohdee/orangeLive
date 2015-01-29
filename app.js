@@ -5,7 +5,12 @@ var app = express();
 var server = require('http').Server(app);
 
 var redisAdapter = require('socket.io-redis');
-global.io = require('socket.io')(server).adapter(redisAdapter({ host: 'localhost', port: 6379 }));;
+var io = require('socket.io')(server).adapter(redisAdapter({
+    host: 'localhost',
+    port: 6379
+}));
+
+global.io = io;
 
 // Requirements
 var debug = require('debug')('orangeLive');
@@ -15,10 +20,12 @@ var logger = require('morgan');
 var bodyParser = require('body-parser');
 var hbs = require('hbs');
 var middleware = require('./middleware');
+var routes = require('./routes');
 
 /*===========================*/
 
 var liveModel = require('./models/live');
+app.use('/api', routes.api);
 
 /*===========================*/
 
@@ -31,7 +38,7 @@ app.engine('html', hbs.__express);
 //app.use(favicon(__dirname + '/public/favicon.ico'));
 app.use(logger('dev'));
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.urlencoded({extended: false}));
 app.use(express.static(path.join(__dirname, 'public')));
 
 //Custom Error

@@ -127,7 +127,6 @@ orangeLive.prototype.item = function () {
     function requestSave(set, priority) {
         // Otherwise update
         self.requestsManager.update({
-            key: set.key,
             priority: priority,
             set: set
         });
@@ -161,7 +160,6 @@ orangeLive.prototype.item = function () {
 
         // Request update
         self.requestsManager.update({
-            key: set.key,
             set: set,
             special: special
         });

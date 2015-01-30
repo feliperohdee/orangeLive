@@ -107,7 +107,7 @@ function create(table) {
 
         // Index
         params.GlobalSecondaryIndexes.push({
-            IndexName: index.name || (hash.name + helpers.capitalize(range.name)),
+            IndexName: index.name || (hash.name + _.capitalize(range.name)),
             KeySchema: [{
                     AttributeName: hash.name,
                     KeyType: 'HASH'
@@ -153,7 +153,7 @@ function create(table) {
 
         // Index
         params.LocalSecondaryIndexes.push({
-            IndexName: index.name || (_.find(params.KeySchema, {KeyType: 'HASH'}).AttributeName + helpers.capitalize(range.name)),
+            IndexName: index.name || (_.find(params.KeySchema, {KeyType: 'HASH'}).AttributeName + _.capitalize(range.name)),
             KeySchema: [{
                     //Get AttributeName from KeySchema => Local index hash needs to be the same KeySchema's hash
                     AttributeName: _.find(params.KeySchema, {KeyType: 'HASH'}).AttributeName,

@@ -6,60 +6,95 @@ orangeLive.prototype.requests = function () {
     return{
         insert: insert,
         item: item,
-        join: join,
         query: query,
-        stream: stream,
         update: update
     };
 
     /*=========================*/
 
     // # Executor
-    function _exec(operation, params) {
+    function _exec(operation, params, callback, subscribe) {
+        //
+        var request = prepareRequest(operation, params);
+
+        // Make request
+        $.ajax({
+            contentType: 'application/json',
+            data: JSON.stringify(request.data || {}),
+            method: request.method,
+            url: request.url
+        }).then(function (result) {
+            //
+            self.responsesManager.dispatch(operation, result);
+
+            if (subscribe) {
+                _exec(operation, params, subscribe);
+            }
+        }).fail(function (err) {
+            console.error(err.status, err.response);
+        });
+    }
+
+    // # Prepare request
+    function prepareRequest(operation, params) {
+        //
+        var methodsMap = {
+            insert: 'push',
+            item: 'get',
+            remove: 'delete',
+            query: 'get',
+            update: 'put'
+        };
+        
+        var result = {
+            method: methodsMap[operation]
+        };
+
         // Extend params with namespace and indexes
-        //self.socket.emit('request', operation, params);
-        var url = '/api/' + self.addressParams.namespace;
+        result.url = '/api/' + self.addressPath.namespace;
 
         // Append a key if exists
-        if (self.addressParams.key) {
-            url += '/' + self.addressParams.key;
+        if (self.addressPath.key || params.key) {
+            result.url += '/' + self.addressPath.key || params.key;
+            // Delete always, this param might be passed only via URL
+            delete params.key;
         }
 
-        // Append params
-        url += '?' + $.param(params);
+        // Append params only when get or delete
+        if (result.method === 'get' || result.method === 'delete' && !_.isEmpty(params)) {
+            result.url += '?' + self.helpers.param(params);
+        } else {
+            // Otherwise feed data to put, or post
+            result.data = params;
+        }
 
-        $.ajax({
-            url: url,
-            success: function (result) {
-                console.log(result);
-            },
-            error: function (err) {
-                console.error('Error');
-            }
-        });
-
+        return result;
     }
 
     // # Request Insert
     function insert(params) {
-        _exec('insert', {
-            priority: params.priority,
-            set: params.set
-        });
+        var insertParams = {};
+
+        if (params.priority)
+            insertParams.priority = params.priority;
+
+        if (params.set)
+            insertParams.set = params.set;
+
+        _exec('insert', insertParams);
     }
 
     // # Request Item
     function item(params) {
-        _exec('item', {
-            consistent: params.consistent,
-            key: params.key,
-            select: params.select
-        });
-    }
+        var itemParams = {};
 
-    // # Request Join
-    function join() {
-        _exec('join');
+        if (params.consistent)
+            itemParams.consistent = params.consistent;
+
+        if (params.select)
+            itemParams.select = params.select;
+
+        _exec('item', itemParams);
     }
 
     // # Request Query
@@ -68,43 +103,49 @@ orangeLive.prototype.requests = function () {
 
         if (params.condition)
             queryParams.condition = params.condition;
-        
+
         if (params.consistent)
             queryParams.consistent = params.consistent;
-        
+
         if (params.desc)
             queryParams.desc = params.desc;
-        
+
         if (params.filters)
             queryParams.filters = params.filters;
-        
-        if (params.index)
-            queryParams.index = params.index;
-        
+
+        if (params.indexedBy)
+            queryParams.indexedBy = params.indexedBy;
+
         if (params.limit)
             queryParams.limit = params.limit;
-        
+
         if (params.select)
             queryParams.select = params.select;
-        
+
         if (params.startAt)
             queryParams.startAt = params.startAt;
 
         _exec('query', queryParams);
     }
 
-    // # Request Stream
-    function stream(data) {
-        _exec('stream', data);
-    }
-
     // # Request Update
-    function update(params) {
-        _exec('update', {
-            key: params.key,
-            priority: params.priority,
-            set: params.set,
-            special: params.special
-        });
+    function update(params, callback) {
+        var updateParams = {};
+
+        // params.key should be used only by insert function, 
+        // when key already exists
+        if (params.key)
+            updateParams.key = params.key;
+
+        if (params.priority)
+            updateParams.priority = params.priority;
+
+        if (params.set)
+            updateParams.set = params.set;
+
+        if (params.special)
+            updateParams.special = params.special;
+
+        _exec('update', updateParams, callback);
     }
 };

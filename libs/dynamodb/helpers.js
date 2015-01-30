@@ -141,9 +141,6 @@ var helpers = {
             return result;
         }
     },
-    capitalize: function (string) {
-        return string.charAt(0).toUpperCase() + string.slice(1).toLowerCase();
-    },
     decodeAttribute: function (attr) {
         var result;
         var key = Object.keys(attr)[0];

@@ -1,12 +1,14 @@
-// # DynamoDb Live
+// # Live Model
 var _ = require('lodash');
 var Promise = require('bluebird');
 var base = require('./base');
 var cuid = new require('cuid');
 
 module.exports = {
+    insert: insert,
     item: item,
-    query: query
+    query: query,
+    update: update
 };
 
 /*----------------------------*/
@@ -130,6 +132,46 @@ function _encodeIndexSet(indexes, set) {
     return _.extend(set, result);
 }
 
+// # Insert Operation
+function insert(object) {
+    return Promise.try(function () {
+        // Build Insert object
+        return {
+            set: _.extend(object.set, {
+                _namespace: object.namespace,
+                _key: '-' + cuid() // Generate new key
+            })
+        };
+    }).then(function (insertObject) {
+        // Append priority if exists
+        if (object.priority) {
+            insertObject.set._pi = object.priority;
+        }
+
+        return insertObject;
+    }).then(function (insertObject) {
+        // Encode Indexes
+        if (object.indexes) {
+            insertObject.set = _encodeIndexSet(object.indexes, insertObject.set);
+        }
+
+        return insertObject;
+    }).then(function (insertObject) {
+        // Broadcast Operation
+        //_sendBroadcast('insert', insertObject.set);
+
+        return insertObject;
+    }).then(function (insertObject) {
+        // Sync Data
+        try {
+            return base.insert(insertObject);
+        } catch (err) {
+            throw err;
+        }
+
+    });
+}
+
 // # Item Operation
 function item(object) {
     return Promise.try(function () {
@@ -139,14 +181,14 @@ function item(object) {
                 _namespace: object.namespace
             }
         };
-    }).then(function (itemParams) {
-        // Define default where
-        if (object.where) {
-            itemParams.where._key = object.where;
+    }).then(function (itemObject) {
+        // Define default key
+        if (object.key) {
+            itemObject.where._key = object.key;
         }
 
-        return itemParams;
-    }).then(function (itemParams) {
+        return itemObject;
+    }).then(function (itemObject) {
         // Define Select
         if (object.select) {
             // Split comma's, always include _key
@@ -155,15 +197,15 @@ function item(object) {
             // Build Alias
             var alias = _buildAlias(selectArray);
 
-            itemParams.alias = alias.data;
-            itemParams.select = alias.map.names.join();
+            itemObject.alias = alias.data;
+            itemObject.select = alias.map.names.join();
         }
 
-        return itemParams;
-    }).then(function (itemParams) {
+        return itemObject;
+    }).then(function (itemObject) {
         // Fetch item
         try {
-            return base.item(itemParams).then(function (result) {
+            return base.item(itemObject).then(function (result) {
                 result.data = _normalizeReponseData(result.data);
 
                 return result;
@@ -187,18 +229,37 @@ function query(object) {
                 _namespace: ['=', object.namespace]
             }
         };
-    }).then(function (queryParams) {
-        // Set default where if exists
-        if (object.where) {
-            queryParams.where._key = object.where;
+    }).then(function (queryObject) {
+        // Set default condition if exists
+        if (object.condition) {
+            queryObject.where._key = object.condition;
         }
 
-        return queryParams;
-    }).then(function (queryParams) {
+        return queryObject;
+    }).then(function (queryObject) {
+        // Define Indexes
+        if (object.indexedBy && object.indexes) {
+            // Discover and get Index
+            var index = _discoverIndex(object.indexes, object.indexedBy);
+
+            // Set indexed by
+            queryObject.indexedBy = index.name;
+
+            // Set condition if exists
+            if (object.condition) {
+                // Remove default key condition
+                delete queryObject.where._key;
+                // Append indexed condition
+                queryObject.where[index.attribute] = object.condition;
+            }
+        }
+
+        return queryObject;
+    }).then(function (queryObject) {
         // Define Select
         if (object.select) {
             if (object.select === 'COUNT') {
-                queryParams.select = 'COUNT';
+                queryObject.select = 'COUNT';
             } else {
                 // Split comma's, always include _key
                 var selectArray = object.select.split(',').concat('_key');
@@ -206,18 +267,18 @@ function query(object) {
                 // Build Alias
                 var alias = _buildAlias(selectArray);
 
-                queryParams.alias = alias.data;
-                queryParams.select = alias.map.names.join();
+                queryObject.alias = alias.data;
+                queryObject.select = alias.map.names.join();
             }
         }
 
-        return queryParams;
-    }).then(function (queryParams) {
+        return queryObject;
+    }).then(function (queryObject) {
         // Define Filter
         if (object.filters && object.filters.length) {
             //
-            queryParams.withFilter = '';
-            queryParams.alias = queryParams.alias || {};
+            queryObject.withFilter = '';
+            queryObject.alias = queryObject.alias || {};
 
             _.each(object.filters, function (filter, index) {
                 //
@@ -229,85 +290,66 @@ function query(object) {
 
                 switch (filter.operation) {
                     case 'attrExists':
-                        queryParams.withFilter += 'attribute_exists(' + alias.map.names[0] + ')';
+                        queryObject.withFilter += 'attribute_exists(' + alias.map.names[0] + ')';
                         break;
                     case 'attrNotExists':
-                        queryParams.withFilter += 'attribute_not_exists(' + alias.map.names[0] + ')';
+                        queryObject.withFilter += 'attribute_not_exists(' + alias.map.names[0] + ')';
                         break;
                     case 'beginsWith':
-                        queryParams.withFilter += 'begins_with(' + alias.map.names[0] + ', ' + alias.map.values[0] + ')';
+                        queryObject.withFilter += 'begins_with(' + alias.map.names[0] + ', ' + alias.map.values[0] + ')';
                         break;
                     case 'between':
-                        queryParams.withFilter += alias.map.names[0] + ' BETWEEN ' + alias.map.values[0] + ' AND ' + alias.map.values[1];
+                        queryObject.withFilter += alias.map.names[0] + ' BETWEEN ' + alias.map.values[0] + ' AND ' + alias.map.values[1];
                         break;
                     case 'contains':
-                        queryParams.withFilter += 'contains(' + alias.map.names[0] + ', ' + alias.map.values[0] + ')';
+                        queryObject.withFilter += 'contains(' + alias.map.names[0] + ', ' + alias.map.values[0] + ')';
                         break;
                     case 'equals':
-                        queryParams.withFilter += alias.map.names[0] + ' = ' + alias.map.values[0];
+                        queryObject.withFilter += alias.map.names[0] + ' = ' + alias.map.values[0];
                         break;
                     case 'greaterThan':
-                        queryParams.withFilter += alias.map.names[0] + ' >= ' + alias.map.values[0];
+                        queryObject.withFilter += alias.map.names[0] + ' >= ' + alias.map.values[0];
                         break;
                     case 'lessThan':
-                        queryParams.withFilter += alias.map.names[0] + ' <= ' + alias.map.values[0];
+                        queryObject.withFilter += alias.map.names[0] + ' <= ' + alias.map.values[0];
                         break;
                     case 'notEquals':
-                        queryParams.withFilter += alias.map.names[0] + ' <> ' + alias.map.values[0];
+                        queryObject.withFilter += alias.map.names[0] + ' <> ' + alias.map.values[0];
                         break;
                 }
 
                 // If morte than one filter, get next comparision
                 if (index < object.filters.length - 1) {
-                    queryParams.withFilter += object.filters[index + 1].or ? ' OR ' : ' AND ';
+                    queryObject.withFilter += object.filters[index + 1].or ? ' OR ' : ' AND ';
                 }
 
                 // Extend alias names
                 if (!_.isEmpty(alias.data.names)) {
                     //
-                    if (!queryParams.alias.names) {
-                        queryParams.alias.names = {};
+                    if (!queryObject.alias.names) {
+                        queryObject.alias.names = {};
                     }
 
-                    _.extend(queryParams.alias.names, alias.data.names);
+                    _.extend(queryObject.alias.names, alias.data.names);
                 }
 
                 // Extend alias values
                 if (!_.isEmpty(alias.data.values)) {
                     //
-                    if (!queryParams.alias.values) {
-                        queryParams.alias.values = {};
+                    if (!queryObject.alias.values) {
+                        queryObject.alias.values = {};
                     }
 
-                    _.extend(queryParams.alias.values, alias.data.values);
+                    _.extend(queryObject.alias.values, alias.data.values);
                 }
             });
         }
 
-        return queryParams;
-    }).then(function (queryParams) {
-        // Define Indexes
-        if (object.index && object.indexes) {
-            // Discover and get Index
-            var index = _discoverIndex(object.indexes, object.index);
-
-            // Set indexed by
-            queryParams.indexedBy = index.name;
-
-            // Set where if exists
-            if (object.where) {
-                // Remove default key where
-                delete queryParams.where._key;
-                // Append indexed where
-                queryParams.where[index.attribute] = object.where;
-            }
-        }
-
-        return queryParams;
-    }).then(function (queryParams) {
+        return queryObject;
+    }).then(function (queryObject) {
         // Fetch query 
         try {
-            return base.query(queryParams).then(function (result) {
+            return base.query(queryObject).then(function (result) {
                 if (result) {
                     result.data = _.map(result.data, function (data) {
                         return _normalizeReponseData(data);
@@ -343,4 +385,105 @@ function _normalizeReponseData(data) {
     delete _data._ni1; // Number index 1
 
     return _data;
+}
+
+// # Update Operation
+function update(object) {
+    return Promise.try(function () {
+        // Validate 
+        if (!object.key) {
+            throw new Error('validationError: No valid keys provided. Please specify primary key field.');
+        }
+    }).then(function () {
+        // Define update object
+        return {
+            set: object.set,
+            where: {
+                _namespace: object.namespace,
+                _key: object.key
+            }
+        };
+    }).then(function (updateObject) {
+        // Encode Indexes
+        if (object.indexes) {
+            updateObject.set = _encodeIndexSet(object.indexes, object.set);
+        }
+
+        return updateObject;
+    }).then(function (updateObject) {
+        // Append priority if exists
+        if (object.priority) {
+            updateObject.set._pi = object.priority;
+        }
+
+        return updateObject;
+    }).then(function (updateObject) {
+        // If special update operation
+        if (object.special) {
+            // Build Alias
+            var alias;
+            var expression;
+
+            switch (object.special) {
+                case 'atomic':
+                    // Build Alias
+                    alias = _buildAlias(_.keys(updateObject.set), _.uniq(_.values(updateObject.set)));
+
+                    if (!alias) {
+                        throw new Error('Invalid attribute or value.');
+                    }
+
+                    // Build expression and define update param
+                    expression = 'SET ' + alias.map.names[0] + ' = ' + alias.map.names[0] + ' + ' + alias.map.values[0];
+
+                    // If index, append expression
+                    if (alias.map.names[1]) {
+                        expression += ', ' + alias.map.names[1] + ' = ' + alias.map.names[1] + ' + ' + alias.map.values[0];
+                    }
+                    break;
+                case 'push':
+                    // Build Alias
+                    alias = _buildAlias(_.keys(updateObject.set), _.uniq([_.values(updateObject.set)])); // <= Array notation is required
+
+                    if (!alias) {
+                        throw new Error('Invalid attribute or value.');
+                    }
+
+                    if (_.isObject(object.set.value)) {
+                        // Expression for [{map}]
+                        expression = 'SET ' + alias.map.names[0] + ' = list_append(' + alias.map.names[0] + ', ' + alias.map.values[0] + ')';
+                    } else {
+                        // Expression for SS or NS
+                        expression = 'ADD ' + alias.map.names[0] + ' ' + alias.map.values[0];
+                    }
+                    break;
+            }
+
+            // Extend update object with alias, and expression
+            _.extend(updateObject, {
+                alias: alias.data,
+                set: expression
+            });
+        }
+
+        return updateObject;
+    }).then(function (updateObject) {
+        // Broadcast Operation {data is extended because other side needs to receive object.key}
+        /*
+         var data = _.extend({}, _.isObject(updateObject.set) ? updateObject.set : object.set, updateObject.key);
+         var operation = 'update' + (object.special ? ':' + object.special : '');
+         
+         _sendBroadcast(operation, data);
+         */
+
+        return updateObject;
+    }).then(function (updateObject) {
+        //var operation = 'update' + (object.special ? ':' + object.special : '');
+
+        try {
+            return base.update(updateObject);
+        } catch (err) {
+            throw err;
+        }
+    });
 }

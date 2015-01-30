@@ -5,6 +5,7 @@ orangeLive.prototype.helpers = function () {
         applySpecialOperation: applySpecialOperation,
         formatDataset: formatDataset,
         getObjectValue: getObjectValue,
+        param: param,
         removeNonSelected: removeNonSelected,
         setObjectValue: setObjectValue
     };
@@ -85,6 +86,60 @@ orangeLive.prototype.helpers = function () {
         }
 
         return obj;
+    }
+    
+    // # Param
+    function param(obj) {
+        var prefix;
+        var result = [];
+        var add = function (key, value) {
+            value = value || "";
+            result[result.length] = encodeURIComponent(key) + "=" + encodeURIComponent(value);
+        };
+
+        // If an array was passed in, assume that it is an array of form elements.
+        if (_.isArray(obj) || (!_.isPlainObject(obj))) {
+            // Serialize the form elements
+            _.each(obj, function (obj) {
+                add(obj.name, obj.value);
+            });
+
+        } else {
+            // encode params recursively.
+            for (prefix in obj) {
+                paramsBuilder(prefix, obj[ prefix ], add);
+            }
+        }
+
+        // Return the resulting serialization
+        return result.join("&").replace(/%20/g, "+");
+    }
+    
+    // # Params Builder
+    function paramsBuilder(prefix, obj, add) {
+        var name;
+
+        if (_.isArray(obj)) {
+            // Serialize array item.
+            _.each(obj, function (index, value) {
+                if (/\[\]$/.test(prefix)) {
+                    // Treat each array item as a scalar.
+                    add(prefix, value);
+                } else {
+                    // Item is non-scalar (array or object), encode its numeric index.
+                    paramsBuilder(prefix + "[" + (_.isObject(value) ? index : "") + "]", value, add);
+                }
+            });
+
+        } else if (_.isObject(obj)) {
+            // Serialize object item.
+            for (name in obj) {
+                paramsBuilder(prefix + "[" + name + "]", obj[ name ], add);
+            }
+        } else {
+            // Serialize scalar item.
+            add(prefix, obj);
+        }
     }
 
     // # Remove Non Selected

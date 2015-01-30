@@ -22,13 +22,6 @@ var hbs = require('hbs');
 var middleware = require('./middleware');
 var routes = require('./routes');
 
-/*===========================*/
-
-var liveModel = require('./models/live');
-app.use('/api', routes.api);
-
-/*===========================*/
-
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'html');
@@ -43,6 +36,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 //Custom Error
 app.use('/error', middleware.errors.customError);
+
+/*===========================*/
+
+var liveModel = require('./models/live');
+app.use('/api', routes.api);
+
+/*===========================*/
 
 //Final Error Handlers
 app.use(middleware.errors.generalError);

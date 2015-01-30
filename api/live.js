@@ -1,5 +1,6 @@
 // # Live API
 var Promise = require('bluebird');
+var _ = require('lodash');
 var liveModel = require('../models/live');
 var tempAccount = 'dlBSd$ib89$Be2';
 
@@ -12,17 +13,31 @@ var fromToken = {
 };
 
 module.exports = {
+    insert: insert,
     item: item,
-    query: query
+    query: query,
+    update: update
 };
 
 /* ======================================================================== */
+
+// # Insert
+function insert(object) {
+    // Temporary
+    object.namespace = fromToken.account + '/' + object.namespace;
+    object.indexes = fromToken.indexes;
+
+    return liveModel.insert(object).then(function (result) {
+        return result;
+    }).catch(function (err) {
+        throw err.message;
+    });
+}
 
 // # Item
 function item(object) {
     // Temporary
     object.namespace = fromToken.account + '/' + object.namespace;
-    object.indexes = fromToken.indexes;
 
     return liveModel.item(object).then(function (result) {
         return result;
@@ -33,8 +48,9 @@ function item(object) {
 
 // # Query
 function query(object) {
-    // emporary
+    // temporary
     object.namespace = tempAccount + '/' + object.namespace;
+    object.indexes = fromToken.indexes;
 
     return liveModel.query(object).then(function (result) {
         return result;
@@ -43,4 +59,17 @@ function query(object) {
     });
 }
 
+// # Update
+function update(object, options) {
+    // Temporary
+    _.extend(object, options);
+    
+    object.namespace = fromToken.account + '/' + object.namespace;
+    object.indexes = fromToken.indexes;
 
+    return liveModel.update(object, options).then(function (result) {
+        return result;
+    }).catch(function (err) {
+        throw err.message;
+    });
+}

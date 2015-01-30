@@ -9,7 +9,7 @@ orangeLive.prototype.collection = function () {
     var _desc = false;
     var _events = {};
     var _filters = [];
-    var _index = false;
+    var _indexedBy = false;
     var _limit = false;
     var _pagination = {
         current: 0,
@@ -131,7 +131,7 @@ orangeLive.prototype.collection = function () {
                 console.error('The index %s is not defined, the collection won\'t be ordenated or fetched by this index.', index);
             }
 
-            _index = index;
+            _indexedBy = index;
 
             return this;
         }
@@ -307,7 +307,7 @@ orangeLive.prototype.collection = function () {
             condition: _condition,
             desc: _desc,
             filters: _filters,
-            index: _index,
+            indexedBy: _indexedBy,
             limit: _limit,
             select: _select,
             startAt: _startAt
@@ -369,7 +369,7 @@ orangeLive.prototype.collection = function () {
     // # Sort and Limit
     function sortAndLimit(data) {
         // Sort
-        data = _.sortBy(data, _index || 'key');
+        data = _.sortBy(data, _indexedBy || 'key');
 
         // If desc, reverse array
         if (_desc) {
@@ -467,7 +467,7 @@ orangeLive.prototype.collection = function () {
             testValue = [_condition[1], _condition[2]];
         }
 
-        var testedValue = self.helpers.getObjectValue(data, _index || 'key');
+        var testedValue = self.helpers.getObjectValue(data, _indexedBy || 'key');
         var notNull = !_.isNull(testedValue);
 
         switch (testCase) {

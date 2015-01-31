@@ -73,14 +73,14 @@ function item(table) {
     // # exec
     function exec() {
         return new Promise(function (resolve, reject) {
-            dynamodbInstance.getItem(params, function (err, result) {
+            dynamodbInstance.getItem(params, function (err, response) {
                 if (err) {
                     reject(err);
                 }
 
-                if (!_.isEmpty(result) && !_.isEmpty(result.Item)) {
+                if (!_.isEmpty(response) && !_.isEmpty(response.Item)) {
                     //Format data
-                    returnData.data = helpers.item.decodeAttributes(result.Item);
+                    returnData.data = helpers.item.decodeAttributes(response.Item);
                 }
 
                 resolve(returnData);
@@ -182,30 +182,30 @@ function queryItems(table) {
         return new Promise(function (resolve, reject) {
             // Define query function, a way to call recursively after words
             var queryFn = function () {
-                dynamodbInstance.query(params, function (err, result) {
+                dynamodbInstance.query(params, function (err, response) {
                     // Throw error
                     if (err) {
                         reject(err);
                     }
 
                     //Format Data
-                    if (!_.isEmpty(result)) {
+                    if (!_.isEmpty(response)) {
                         // Feed returnData
-                        if (!_.isEmpty(result.Items)) {
-                            returnData.data.push.apply(returnData.data, helpers.items.decodeAttributes(result.Items));
+                        if (!_.isEmpty(response.Items)) {
+                            returnData.data.push.apply(returnData.data, helpers.items.decodeAttributes(response.Items));
                         }
 
-                        if (result.LastEvaluatedKey) {
-                            returnData.startKey = helpers.item.decodeAttributes(result.LastEvaluatedKey);
+                        if (response.LastEvaluatedKey) {
+                            returnData.startKey = helpers.item.decodeAttributes(response.LastEvaluatedKey);
                         }
 
-                        if (result.Count) {
-                            returnData.count += result.Count;
+                        if (response.Count) {
+                            returnData.count += response.Count;
                         }
 
                         // If not limit, call queryFn recursively with ExclusiveStartKey apended via LastEvaluatedKey
-                        if (!params.Limit && result.LastEvaluatedKey) {
-                            params.ExclusiveStartKey = result.LastEvaluatedKey;
+                        if (!params.Limit && response.LastEvaluatedKey) {
+                            params.ExclusiveStartKey = response.LastEvaluatedKey;
                             //Recursion
                             return queryFn();
                         }
@@ -326,30 +326,30 @@ function scanItems(table) {
         return new Promise(function (resolve, reject) {
             // Define scan function, a way to call recursively after words
             var scanFn = function () {
-                dynamodbInstance.scan(params, function (err, result) {
+                dynamodbInstance.scan(params, function (err, response) {
                     // Throw error
                     if (err) {
                         reject(err);
                     }
 
                     //Format Data
-                    if (!_.isEmpty(result)) {
+                    if (!_.isEmpty(response)) {
                         // Feed returnData
-                        if (!_.isEmpty(result.Items)) {
-                            returnData.data.push.apply(returnData.data, helpers.items.decodeAttributes(result.Items));
+                        if (!_.isEmpty(response.Items)) {
+                            returnData.data.push.apply(returnData.data, helpers.items.decodeAttributes(response.Items));
                         }
 
-                        if (result.LastEvaluatedKey) {
-                            returnData.startKey = helpers.item.decodeAttributes(result.LastEvaluatedKey);
+                        if (response.LastEvaluatedKey) {
+                            returnData.startKey = helpers.item.decodeAttributes(response.LastEvaluatedKey);
                         }
 
-                        if (result.Count) {
-                            returnData.count += result.Count;
+                        if (response.Count) {
+                            returnData.count += response.Count;
                         }
 
                         // If not limit, call queryFn recursively with ExclusiveStartKey apended via LastEvaluatedKey
-                        if (!params.Limit && result.LastEvaluatedKey) {
-                            params.ExclusiveStartKey = result.LastEvaluatedKey;
+                        if (!params.Limit && response.LastEvaluatedKey) {
+                            params.ExclusiveStartKey = response.LastEvaluatedKey;
                             //Recursion
                             return scanFn();
                         }

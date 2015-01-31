@@ -2,6 +2,8 @@
 orangeLive.prototype.requests = function () {
     //
     var self = this;
+    
+    _subscribe();
 
     return{
         insert: insert,
@@ -13,7 +15,7 @@ orangeLive.prototype.requests = function () {
     /*=========================*/
 
     // # Executor
-    function _exec(operation, params, callback, subscribe) {
+    function _exec(operation, params, onComplete) {
         //
         var request = prepareRequest(operation, params);
 
@@ -23,15 +25,51 @@ orangeLive.prototype.requests = function () {
             data: JSON.stringify(request.data || {}),
             method: request.method,
             url: request.url
-        }).then(function (result) {
+        }).then(function (response) {
             //
-            self.responsesManager.dispatch(operation, result);
+            self.responsesManager.dispatch(operation, response);
 
-            if (subscribe) {
-                _exec(operation, params, subscribe);
+            // onComplete callback
+            if (onComplete) {
+                onComplete(response);
             }
         }).fail(function (err) {
-            console.error(err.status, err.response);
+            console.error({
+                status: err.status,
+                message: err.responseJSON
+            });
+
+            // onComplete callback
+            if (onComplete) {
+                onComplete(false, {
+                    status: err.status,
+                    message: err.responseJSON
+                });
+            }
+        });
+    }
+
+    // # Subscribe {execute infinite loop}
+    function _subscribe() {
+        //
+        var request = prepareRequest('subscribe', {});
+
+        // Make request
+        $.ajax({
+            url: request.url
+        }).then(function (response) {
+            //
+            if(!_.isEmpty(response)){
+                self.responsesManager.dispatch(response.operation, response.data);
+            }
+
+            // Pooling connection
+            _subscribe();
+        }).fail(function (err) {
+            console.error({
+                status: err.status,
+                message: err.responseJSON
+            });
         });
     }
 
@@ -42,16 +80,21 @@ orangeLive.prototype.requests = function () {
             insert: 'push',
             item: 'get',
             remove: 'delete',
+            subscribe: 'get',
             query: 'get',
             update: 'put'
         };
-        
+
         var result = {
             method: methodsMap[operation]
         };
 
         // Extend params with namespace and indexes
-        result.url = '/api/' + self.addressPath.namespace;
+        if(operation !== 'subscribe'){
+            result.url = '/api/' + self.addressPath.namespace;
+        }else{
+            result.url = '/api/subscribe/' + self.addressPath.namespace;
+        }
 
         // Append a key if exists
         if (self.addressPath.key || params.key) {
@@ -61,7 +104,7 @@ orangeLive.prototype.requests = function () {
         }
 
         // Append params only when get or delete
-        if (result.method === 'get' || result.method === 'delete' && !_.isEmpty(params)) {
+        if (!_.isEmpty(params) && result.method === 'get' || result.method === 'delete') {
             result.url += '?' + self.helpers.param(params);
         } else {
             // Otherwise feed data to put, or post

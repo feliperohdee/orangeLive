@@ -61,8 +61,8 @@ function _createTables() {
 
     // Each executes in series
     return Promise.each(tables, function (task) {
-        return task.exec().then(function (result) {
-            returnData.push(result);
+        return task.exec().then(function (response) {
+            returnData.push(response);
         });
     }).then(function () {
         return returnData;

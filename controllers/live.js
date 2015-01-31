@@ -28,7 +28,7 @@ module.exports = {
 /*--------------------*/
 
 function __construct() {
-    sub.subscribe('stream:' + process.pid);
+    sub.subscribe('broadcast');
 
     sub.on('message', function (channel, data) {
         data = JSON.parse(data);

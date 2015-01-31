@@ -1,7 +1,7 @@
 // # Live API
-var Promise = require('bluebird');
 var _ = require('lodash');
 var liveModel = require('../models/live');
+var broadcastModel = require('../models/broadcast');
 var tempAccount = 'dlBSd$ib89$Be2';
 
 var fromToken = {
@@ -16,7 +16,8 @@ module.exports = {
     insert: insert,
     item: item,
     query: query,
-    update: update
+    subscribe: subscribe,
+    update: update,
 };
 
 /* ======================================================================== */
@@ -27,8 +28,8 @@ function insert(object) {
     object.namespace = fromToken.account + '/' + object.namespace;
     object.indexes = fromToken.indexes;
 
-    return liveModel.insert(object).then(function (result) {
-        return result;
+    return liveModel.insert(object).then(function (response) {
+        return response;
     }).catch(function (err) {
         throw err.message;
     });
@@ -39,8 +40,8 @@ function item(object) {
     // Temporary
     object.namespace = fromToken.account + '/' + object.namespace;
 
-    return liveModel.item(object).then(function (result) {
-        return result;
+    return liveModel.item(object).then(function (response) {
+        return response;
     }).catch(function (err) {
         throw err.message;
     });
@@ -52,9 +53,21 @@ function query(object) {
     object.namespace = tempAccount + '/' + object.namespace;
     object.indexes = fromToken.indexes;
 
-    return liveModel.query(object).then(function (result) {
-        return result;
+    return liveModel.query(object).then(function (response) {
+        return response;
     }).catch(function (err) {
+        throw err.message;
+    });
+}
+
+// # Subscribe
+function subscribe(object) {
+    // temporary
+    object.namespace = tempAccount + '/' + object.namespace;
+
+    return broadcastModel.subscribe(object).then(function (response) {
+        return response;
+    }).catch(function(err){
         throw err.message;
     });
 }
@@ -63,12 +76,12 @@ function query(object) {
 function update(object, options) {
     // Temporary
     _.extend(object, options);
-    
+
     object.namespace = fromToken.account + '/' + object.namespace;
     object.indexes = fromToken.indexes;
 
-    return liveModel.update(object, options).then(function (result) {
-        return result;
+    return liveModel.update(object, options).then(function (response) {
+        return response;
     }).catch(function (err) {
         throw err.message;
     });

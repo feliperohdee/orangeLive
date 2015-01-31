@@ -2,6 +2,7 @@
 var _ = require('lodash');
 var Promise = require('bluebird');
 var base = require('./base');
+var broadcastModel = require('../models/broadcast');
 var cuid = new require('cuid');
 
 module.exports = {
@@ -205,10 +206,10 @@ function item(object) {
     }).then(function (itemObject) {
         // Fetch item
         try {
-            return base.item(itemObject).then(function (result) {
-                result.data = _normalizeReponseData(result.data);
+            return base.item(itemObject).then(function (response) {
+                response.data = _normalizeReponseData(response.data);
 
-                return result;
+                return response;
             });
         } catch (err) {
             throw err;
@@ -349,13 +350,13 @@ function query(object) {
     }).then(function (queryObject) {
         // Fetch query 
         try {
-            return base.query(queryObject).then(function (result) {
-                if (result) {
-                    result.data = _.map(result.data, function (data) {
+            return base.query(queryObject).then(function (response) {
+                if (response) {
+                    response.data = _.map(response.data, function (data) {
                         return _normalizeReponseData(data);
                     });
 
-                    return result;
+                    return response;
                 }
             });
         } catch (err) {
@@ -468,18 +469,18 @@ function update(object) {
 
         return updateObject;
     }).then(function (updateObject) {
-        // Broadcast Operation {data is extended because other side needs to receive object.key}
-        /*
-         var data = _.extend({}, _.isObject(updateObject.set) ? updateObject.set : object.set, updateObject.key);
-         var operation = 'update' + (object.special ? ':' + object.special : '');
-         
-         _sendBroadcast(operation, data);
-         */
+        // Broadcast Operation {data is extended because other side needs to receive updateObject.where}
+        var operation = 'update' + (object.special ? ':' + object.special : '');
+        var data = _.extend({}, _.isObject(updateObject.set) ? updateObject.set : object.set, updateObject.where);
+
+        broadcastModel.publish({
+            operation: operation,
+            namespace: object.namespace,
+            data: _normalizeReponseData(data)
+        });
 
         return updateObject;
     }).then(function (updateObject) {
-        //var operation = 'update' + (object.special ? ':' + object.special : '');
-
         try {
             return base.update(updateObject);
         } catch (err) {

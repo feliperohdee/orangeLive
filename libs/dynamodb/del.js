@@ -69,14 +69,14 @@ function item(table) {
     // # Exec
     function exec() {
         return new Promise(function (resolve, reject) {
-            dynamodbInstance.deleteItem(params, function (err, result) {
+            dynamodbInstance.deleteItem(params, function (err, response) {
                 if (err) {
                     reject(err);
                 }
 
                 resolve({
                     data: returnData,
-                    response: result
+                    response: response
                 });
             });
         });
@@ -134,12 +134,12 @@ function items(table) {
         //Define Batch Function
         var _batchFn = function (params) {
             return new Promise(function (resolve, reject) {
-                dynamodbInstance.batchWriteItem(params, function (err, result) {
+                dynamodbInstance.batchWriteItem(params, function (err, response) {
                     if (err) {
                         reject(err);
                     }
 
-                    resolve(result);
+                    resolve(response);
                 });
             });
         };
@@ -149,10 +149,10 @@ function items(table) {
             requests.push(_batchFn(params));
         });
 
-        return Promise.all(requests).then(function (result) {
+        return Promise.all(requests).then(function (response) {
             return {
                 data: returnData,
-                response: result
+                response: response
             };
         });
     }
@@ -220,9 +220,9 @@ function itemsByQuery(table) {
         return dynamoGet.queryItems(params.TableName)
                 .where(params.Where)
                 .exec()
-                .then(function (result) {
+                .then(function (response) {
                     return items(params.TableName)
-                            .where(result.data)
+                            .where(response.data)
                             .exec();
                 });
     }

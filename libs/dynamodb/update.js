@@ -68,14 +68,14 @@ function item(table) {
     // # Exec
     function exec() {
         return new Promise(function (resolve, reject) {
-            dynamodbInstance.updateItem(params, function (err, result) {
+            dynamodbInstance.updateItem(params, function (err, response) {
                 if (err) {
                     reject(err);
                 }
 
                 resolve({
                     data: returnData,
-                    response: result
+                    response: response
                 });
             });
         });

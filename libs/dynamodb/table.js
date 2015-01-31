@@ -73,18 +73,18 @@ function create(table) {
         return new Promise(function (resolve, reject) {
             // test if table exists
             describe(table).exec()
-                    .then(function (result) {
+                    .then(function (response) {
                         // Table exists
-                        resolve(result);
+                        resolve(response);
                     })
                     .catch(function () {
                         // Table not exists
-                        dynamodbInstance.createTable(params, function (err, result) {
+                        dynamodbInstance.createTable(params, function (err, response) {
                             if (err) {
                                 reject(err);
                             }
 
-                            resolve(result);
+                            resolve(response);
                         });
                     });
         });
@@ -224,12 +224,12 @@ function del(table) {
     // # Exec
     function exec() {
         return new Promise(function (resolve, reject) {
-            dynamodbInstance.deleteTable(params, function (err, result) {
+            dynamodbInstance.deleteTable(params, function (err, response) {
                 if (err) {
                     reject(err);
                 }
 
-                resolve(result);
+                resolve(response);
             });
         });
     }
@@ -262,12 +262,12 @@ function describe(table) {
     // # Exec
     function exec() {
         return new Promise(function (resolve, reject) {
-            dynamodbInstance.describeTable(params, function (err, result) {
+            dynamodbInstance.describeTable(params, function (err, response) {
                 if (err) {
                     reject(err);
                 }
 
-                resolve(result);
+                resolve(response);
             });
         });
     }
@@ -298,12 +298,12 @@ function list(table) {
     // # Exec
     function exec() {
         return new Promise(function (resolve, reject) {
-            dynamodbInstance.listTables(params, function (err, result) {
+            dynamodbInstance.listTables(params, function (err, response) {
                 if (err) {
                     reject(err);
                 }
 
-                resolve(result);
+                resolve(response);
             });
         });
     }
@@ -347,12 +347,12 @@ function update(table) {
     // # Exec
     function exec() {
         return new Promise(function (resolve, reject) {
-            dynamodbInstance.updateTable(params, function (err, result) {
+            dynamodbInstance.updateTable(params, function (err, response) {
                 if (err) {
                     reject(err);
                 }
 
-                resolve(result);
+                resolve(response);
             });
         });
     }

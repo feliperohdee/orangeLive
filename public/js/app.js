@@ -1,5 +1,4 @@
 // # App
-//var instance = orangeLive('*').select('name, height, age').useIndex('height');
 var instance = new orangeLive('dlBSd$ib89$Be2/users').last(5).select('age').indexedBy('age').on('load', function (data, count, pagination) {
     //console.log('instance 1', data);
     //console.log('instance 1 count', count);
@@ -18,27 +17,25 @@ var instance = new orangeLive('dlBSd$ib89$Be2/users').last(5).select('age').inde
         $('#next').attr('disabled', 'disabled');
     }
 
-    if (_.isArray(data)) {
-        /*
-        _.each(data, function (item) {
-            if (item.key() === 'rohde5') {
-                setTimeout(function () {
-                    item.save({
-                        name: 'rohde Test'
-                    });
-                }, 1000);
-            }
-        });
-        */
-    } else {
-        /*
-         setTimeout(function () {
-         data.save({
-         age: data.value('age') + 1
-         });
-         }, 1000);
-         */
-    }
+    /*
+     if (_.isArray(data)) {
+     _.each(data, function (item) {
+     if (item.key() === 'rohde5') {
+     setTimeout(function () {
+     item.save({
+     age: item.value('age') + 1
+     });
+     }, 1000);
+     }
+     });
+     } else {
+     setTimeout(function () {
+     data.save({
+     age: data.value('age') + 1
+     });
+     }, 1000);
+     }
+     */
 
     updateView(data);
 }).on('save', function (data) {
@@ -71,7 +68,7 @@ function add() {
 var instance2 = new orangeLive('dlBSd$ib89$Be2/users/rohde1').on('load', function (data) {
     //console.log('instance 2', data.value());
 }).on('save', function (data) {
-    //console.log('instance 2 On save Event', data);
+    console.log('instance 2 On save Event', data);
 });
 
 function update() {
@@ -97,35 +94,37 @@ function increment() {
 function decrement() {
     instance2.decrement('age', 1);
 }
-
-function pushList() {
-    instance2.pushList('array', 'pqno');
-}
-
-var instance3 = new orangeLive('dlBSd$ib89$Be2/users/rohde1').on('load', function (data) {
-    //console.log('instance 3', data);
-}).on('save', function (data) {
-    //console.log('instance 3 On save Event', data);
-});
-
-
-function updateWithCondition() {
-    instance3.saveWithCondition(function (data) {
-        if (data.rule) {
-            return {
-                rule: {
-                    type: 'condition',
-                    description: 'hello'
-                }
-            };
-        }
-    });
-}
-
-function getRandomInt(min, max) {
-    return Math.floor(Math.random() * (max - min)) + min;
-}
-
+//
+//
+//function pushList() {
+//    instance2.pushList('array', 'pqno');
+//}
+//
+///*
+//var instance3 = new orangeLive('dlBSd$ib89$Be2/users/rohde1').on('load', function (data) {
+//    //console.log('instance 3', data);
+//}).on('save', function (data) {
+//    console.log('instance 3 On save Event', data);
+//});
+//*/
+//
+//function updateWithCondition() {
+//    instance3.saveWithCondition(function (data) {
+//        if (data.rule) {
+//            return {
+//                rule: {
+//                    type: 'condition',
+//                    description: 'hello'
+//                }
+//            };
+//        }
+//    });
+//}
+//
+//function getRandomInt(min, max) {
+//    return Math.floor(Math.random() * (max - min)) + min;
+//}
+//
 function updateView(data) {
     $('body').find('table tbody').html('');
     $('body').find('#data').html('');

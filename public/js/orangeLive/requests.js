@@ -2,7 +2,7 @@
 orangeLive.prototype.requests = function () {
     //
     var self = this;
-    
+
     _subscribe();
 
     return{
@@ -14,31 +14,46 @@ orangeLive.prototype.requests = function () {
 
     /*=========================*/
 
-    // # Executor
-    function _exec(operation, params, onComplete) {
+    // # Fetch {query and item}
+    function _fetch(operation, params) {
         //
-        var request = prepareRequest(operation, params);
-
-        // Make request
         $.ajax({
-            contentType: 'application/json',
-            data: JSON.stringify(request.data || {}),
-            method: request.method,
-            url: request.url
+            data: params || false,
+            url: '/api/' + _makeURL()
         }).then(function (response) {
             //
-            self.responsesManager.dispatch(operation, response);
-
-            // onComplete callback
-            if (onComplete) {
-                onComplete(response);
+            if (!_.isEmpty(response)) {
+                self.responsesManager.dispatch(operation, response);
             }
         }).fail(function (err) {
             console.error({
                 status: err.status,
                 message: err.responseJSON
             });
+        });
+    }
 
+    // # Set {insert, remove and update}
+    function _set(operation, params, onComplete) {
+        //
+        var methodsMap = {
+            insert: 'push',
+            remove: 'delete',
+            update: 'put'
+        };
+
+        //
+        $.ajax({
+            contentType: 'application/json',
+            data: params ? JSON.stringify(params) : false,
+            method: methodsMap[operation],
+            url: '/api/' + _makeURL()
+        }).then(function (response) {
+            // onComplete callback
+            if (onComplete) {
+                onComplete(response);
+            }
+        }).fail(function (err) {
             // onComplete callback
             if (onComplete) {
                 onComplete(false, {
@@ -52,14 +67,12 @@ orangeLive.prototype.requests = function () {
     // # Subscribe {execute infinite loop}
     function _subscribe() {
         //
-        var request = prepareRequest('subscribe', {});
-
-        // Make request
         $.ajax({
-            url: request.url
+            cache: false,
+            url: '/api/subscribe/' + _makeURL()
         }).then(function (response) {
             //
-            if(!_.isEmpty(response)){
+            if (!_.isEmpty(response)) {
                 self.responsesManager.dispatch(response.operation, response.data);
             }
 
@@ -73,45 +86,17 @@ orangeLive.prototype.requests = function () {
         });
     }
 
-    // # Prepare request
-    function prepareRequest(operation, params) {
+    // # Make URL
+    function _makeURL(key) {
         //
-        var methodsMap = {
-            insert: 'push',
-            item: 'get',
-            remove: 'delete',
-            subscribe: 'get',
-            query: 'get',
-            update: 'put'
-        };
-
-        var result = {
-            method: methodsMap[operation]
-        };
-
-        // Extend params with namespace and indexes
-        if(operation !== 'subscribe'){
-            result.url = '/api/' + self.addressPath.namespace;
-        }else{
-            result.url = '/api/subscribe/' + self.addressPath.namespace;
-        }
+        var url = self.addressPath.namespace;
 
         // Append a key if exists
-        if (self.addressPath.key || params.key) {
-            result.url += '/' + self.addressPath.key || params.key;
-            // Delete always, this param might be passed only via URL
-            delete params.key;
+        if (self.addressPath.key || key) {
+            url += '/' + self.addressPath.key || key;
         }
 
-        // Append params only when get or delete
-        if (!_.isEmpty(params) && result.method === 'get' || result.method === 'delete') {
-            result.url += '?' + self.helpers.param(params);
-        } else {
-            // Otherwise feed data to put, or post
-            result.data = params;
-        }
-
-        return result;
+        return url;
     }
 
     // # Request Insert
@@ -124,7 +109,7 @@ orangeLive.prototype.requests = function () {
         if (params.set)
             insertParams.set = params.set;
 
-        _exec('insert', insertParams);
+        _set('insert', insertParams);
     }
 
     // # Request Item
@@ -137,7 +122,7 @@ orangeLive.prototype.requests = function () {
         if (params.select)
             itemParams.select = params.select;
 
-        _exec('item', itemParams);
+        _fetch('item', itemParams);
     }
 
     // # Request Query
@@ -168,7 +153,7 @@ orangeLive.prototype.requests = function () {
         if (params.startAt)
             queryParams.startAt = params.startAt;
 
-        _exec('query', queryParams);
+        _fetch('query', queryParams);
     }
 
     // # Request Update
@@ -189,6 +174,6 @@ orangeLive.prototype.requests = function () {
         if (params.special)
             updateParams.special = params.special;
 
-        _exec('update', updateParams, callback);
+        _set('update', updateParams, callback);
     }
 };

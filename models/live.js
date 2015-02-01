@@ -476,6 +476,7 @@ function update(object) {
         broadcastModel.publish({
             operation: operation,
             namespace: object.namespace,
+            key: object.key,
             data: _normalizeReponseData(data)
         });
 

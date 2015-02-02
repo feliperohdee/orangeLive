@@ -1,107 +1,129 @@
 // # Broadcast Model
 var _ = require('lodash');
 var Promise = require('bluebird');
-var EventEmitter = require('events').EventEmitter;
-var messageBus = new EventEmitter();
 var redis = require('redis');
-var channels = {};
+var url = require('url');
 
 // Create redis clients
-var sub = redis.createClient(6379, '127.0.0.1');
-var pub = redis.createClient(6379, '127.0.0.1');
+var redisSub = redis.createClient(6379, '127.0.0.1');
+var redisPub = redis.createClient(6379, '127.0.0.1');
 
-_listen();
+//
+var channels = {};
+var channelPerClient = {};
+
+// TEMPORARY
+var fromToken = {
+    account: 'dlBSd$ib89$Be2'
+};
+
+_construct();
 
 module.exports = {
-    publish: publish,
-    subscribe: subscribe
+    publish: publish
 };
 
 /*--------------------*/
 
-// # Dispatcher
-function _dispatch(channel, data) {
-    // Emit just when there are subscribers
-    if (!!channels[channel]) {
-        messageBus.emit(channel, data);
-    }
-}
+function _construct() {
+    // Listen socket connection
+    ws.on('connection', function (clientSocket) {
+        //
+        var clientUrl = url.parse(clientSocket.upgradeReq.url, true);
+        var clientHeaders = clientSocket.upgradeReq.headers;
+        var clientId = clientHeaders['sec-websocket-key'];
+        var channel = fromToken.account + clientUrl.pathname;
 
-function _listen() {
-    // Subscribe to broadcast channel
-    sub.subscribe('broadcast');
+        _subscribeClient(clientId, clientSocket, channel);
 
-    // Listen Messages
-    sub.on('message', function (channel, response) {
+        // Handle close connections
+        clientSocket.on('close', function () {
+            _unsubscribeClient(clientId);
+        });
+    });
+
+    // Subscribe to redis broadcast channel
+    redisSub.subscribe('broadcast');
+    
+    // Handle redis broacasts
+    redisSub.on('message', function (c, response) {
         // Parse JSON
         response = JSON.parse(response);
 
-        // Always dispatch to just namespace channel {hit collections}
-        _dispatch(response.namespace, {
+        var channel = response.namespace;
+        var key = response.key;
+        var data = {
             operation: response.operation,
             data: response.data
-        });
+        };
+
+        // ALWAYS dispatch to just namespace channel {hit collections}
+        _dispatch(channel, data);
 
         // If key dispatch to namespace + key {hit items}
-        if (response.key) {
-            _dispatch(response.namespace + '/' + response.key, {
-                operation: response.operation,
-                data: response.data
-            });
+        if (key) {
+            _dispatch(channel + '/' + key, data);
         }
     });
-
-    // Each 1000 ms clean all channels
-    /*
-    setInterval(function () {
-        //
-        _.each(channels, function (value, channel) {
-            console.log('gc');
-            _dispatch(channel, {});
-        });
-    }, 5000);
-    */
 }
 
 // # Publish
 function publish(object) {
     // Publish in broadcast channel
-    return pub.publish('broadcast', JSON.stringify(object));
+    return redisPub.publish('broadcast', JSON.stringify(object));
 }
 
-// # Store Channel
-function storeChannel(channel) {
-    if (!channels[channel])
-        channels[channel] = 0;
-
-    channels[channel]++;
-    
-    console.log(channels[channel]);
+// # Create Channel
+function _createChannel(channel) {
+    console.log('Channel created', channel);
+    channels[channel] = {};
 }
 
-// # Remove Channel
-function removeChannel(channel) {
+// # Delete Channel
+function _deleteChannel(channel) {
+    console.log('Channel closed', channel);
     delete channels[channel];
 }
 
-// # Subscribe
-function subscribe(object) {
-    return new Promise(function (resolve) {
-        // Hold connection and resolve when there is a response
-        var channel = object.namespace;
-
-        if (object.key) {
-            channel += '/' + object.key;
-        }
-        
-        // Store channel
-        storeChannel(channel);
-
-        messageBus.once(channel, function (response) {
-            // Remove channel
-            removeChannel(channel);
-            //
-            resolve(response);
+// # Dispatch
+function _dispatch(channel, data) {
+    // Iterate channel to look for clients
+    //console.log('Dispatching to', channel);
+    if (!_.isEmpty(channels[channel])) {
+        _.each(channels[channel], function (clientSocket) {
+            try {
+                clientSocket.send(JSON.stringify(data));
+            } catch (err) {
+                console.log(err.message);
+            }
         });
-    });
+    }
+}
+
+// # Subscribe Client
+function _subscribeClient(clientId, clientSocket, channel) {
+    // If channel doesn't exists, create it
+    if (!channels[channel]) {
+        _createChannel(channel);
+    }
+
+    // Subscribe client
+    console.log('Client created', channel, clientId);
+    channelPerClient[clientId] = channel;
+    channels[channel][clientId] = clientSocket;
+}
+
+// # Unsubscrbe Client
+function _unsubscribeClient(clientId) {
+    // Seek what channel this client is connected
+    var channel = channelPerClient[clientId];
+
+    // Delete client from channel
+    console.log('Client closed', channel, clientId);
+    delete channels[channel][clientId];
+
+    // Test if there are more clients in this channel, if no, delete it too
+    if (_.isEmpty(channels[channel])) {
+        _deleteChannel(channel);
+    }
 }

@@ -1,19 +1,29 @@
+var debug = require('debug')('orangeLive');
 var express = require('express');
 
-// Start HTTP Server
+/*==== Servers Config =====*/
+
 var app = express();
-var server = require('http').Server(app);
 
-var redisAdapter = require('socket.io-redis');
-var io = require('socket.io')(server).adapter(redisAdapter({
-    host: 'localhost',
-    port: 6379
-}));
+// HTTP Server
+var server = app.listen(process.env.PORT || 3000, function () {
+    debug('Express server listening on port ' + server.address().port);
+});
 
-global.io = io;
+// Web Sockets
+var WebSocketServer = require('ws').Server;
+var ws = new WebSocketServer({
+    server: server,
+    verifyClient: function (info, accepts) {
+        accepts(true, 404, 'Fuck U');
+    }
+});
 
-// Requirements
-var debug = require('debug')('orangeLive');
+// Expose ws as global
+global.ws = ws;
+
+/*==== Servers Config - End =====*/
+
 var path = require('path');
 var favicon = require('serve-favicon');
 var logger = require('morgan');
@@ -39,7 +49,6 @@ app.use('/error', middleware.errors.customError);
 
 /*===========================*/
 
-var liveModel = require('./models/live');
 app.use('/api', routes.api);
 
 /*===========================*/
@@ -47,11 +56,5 @@ app.use('/api', routes.api);
 //Final Error Handlers
 app.use(middleware.errors.generalError);
 app.use(middleware.errors.notFoundError);
-
-
-//Start server
-server.listen(process.env.PORT || 3000, function () {
-    debug('Express server listening on port ' + server.address().port);
-});
 
 module.exports = app;

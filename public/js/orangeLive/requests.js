@@ -64,26 +64,49 @@ orangeLive.prototype.requests = function () {
         });
     }
 
-    // # Subscribe {execute infinite loop}
+    // # Subscribe {listen sockets}
     function _subscribe() {
         //
-        $.ajax({
-            cache: false,
-            url: '/api/subscribe/' + _makeURL()
-        }).then(function (response) {
-            //
-            if (!_.isEmpty(response)) {
-                self.responsesManager.dispatch(response.operation, response.data);
-            }
+        var url = 'ws://' + window.document.location.host + '/' + self.addressPath.namespace;
+        var ws;
 
-            // Pooling connection
-            _subscribe();
-        }).fail(function (err) {
-            console.error({
-                status: err.status,
-                message: err.responseJSON
-            });
-        });
+        _connect();
+        _listen();
+
+        /*======================*/
+
+        function _connect() {
+            //
+            console.log('connecting');
+
+            ws = new WebSocket(url);
+        }
+
+        function _listen() {
+            ws.onopen = function () {
+                console.log('Ws Opened');
+            };
+
+            ws.onclose = function () {
+                console.log('Ws Closed');
+
+                // Try reconnect
+                setTimeout(_connect, 1500);
+            };
+
+            ws.onerror = function () {
+                console.log('Ws Error');
+            };
+
+            ws.onmessage = function (response) {
+                // Parse response
+                response = JSON.parse(response.data);
+
+                if (!_.isEmpty(response)) {
+                    self.responsesManager.dispatch(response.operation, response.data);
+                }
+            };
+        }
     }
 
     // # Make URL

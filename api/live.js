@@ -16,7 +16,6 @@ module.exports = {
     insert: insert,
     item: item,
     query: query,
-    subscribe: subscribe,
     update: update,
 };
 
@@ -56,18 +55,6 @@ function query(object) {
     return liveModel.query(object).then(function (response) {
         return response;
     }).catch(function (err) {
-        throw err.message;
-    });
-}
-
-// # Subscribe
-function subscribe(object) {
-    // temporary
-    object.namespace = tempAccount + '/' + object.namespace;
-
-    return broadcastModel.subscribe(object).then(function (response) {
-        return response;
-    }).catch(function(err){
         throw err.message;
     });
 }

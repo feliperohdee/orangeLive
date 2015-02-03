@@ -30,7 +30,7 @@ orangeLive.prototype.responses = function () {
                 // Get atomic or push
                 var specialOperation = operation.split(':')[1];
                 var value = self.instance.handleSpecialOperation(specialOperation, response);
-                
+
                 if (value) {
                     // Update Collection/Item Dataset
                     self.instance.saveDataSet(value);
@@ -43,6 +43,9 @@ orangeLive.prototype.responses = function () {
                 self.instance.load(response);
                 // Dispatch Events
                 goEvent(['load'], response.data);
+                break;
+            case 'stream':
+                goEvent(['stream'], response.data);
                 break;
             default:
                 console.log(operation, response);
@@ -76,7 +79,7 @@ orangeLive.prototype.responses = function () {
                     case 'save:insert':
                     case 'save:update':
                     case 'stream':
-                        // When event is save, throw just last transaction data
+                        // When event is save || stream, throw just last transaction data
                         callback(data);
                         break;
                     default:

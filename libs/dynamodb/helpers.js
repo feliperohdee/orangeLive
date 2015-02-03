@@ -170,6 +170,11 @@ var helpers = {
         return result;
     },
     encodeAttribute: function (attr) {
+        // If not illegal number, force it to be a NUMBER type, not STRING
+        if (!isNaN(attr)) {
+            attr = parseFloat(attr);
+        }
+
         // If is array define a number set or string set
         if (_.isArray(attr)) {
             if (helpers.isStringArray(attr)) {

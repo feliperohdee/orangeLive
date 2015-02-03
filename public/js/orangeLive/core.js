@@ -12,12 +12,13 @@ function orangeLive(address) {
     };
 
     self.helpers = self.helpers();
-
+    
+    // TEMPORARY
     self.indexes = {
         string: ['name'],
         number: ['height', 'age']
     };
-    
+
     self.instance;
     self.isCollection = false;
     self.requestsManager = self.requests();
@@ -40,27 +41,24 @@ function orangeLive(address) {
         }
 
         // Expose API
-        //return _.extend(instance.api(), sharedAPI());
-        return self.instance.api();
+        return _.extend(self.instance.api(), sharedAPI());
     }
 
     // Shared API either item and collection
-    /*
     function sharedAPI() {
         //
         return{
             stream: stream
         };
 
-        /*----------------------------*
+        /*----------------------------*/
 
         // # Stream
         function stream(data) {
             //
-            requestStream({
+            self.requestsManager.stream({
                 data: data
             });
         }
     }
-    */
 }

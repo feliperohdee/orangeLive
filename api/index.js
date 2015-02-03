@@ -22,7 +22,7 @@ function http(apiMethod) {
         // We define 2 properties for using as arguments in API calls:
         var object = req.body;
         var options = _.extend({}, req.files, req.query, req.params);
-
+        
         // If this is a GET, or a DELETE, req.body should be null, so we only have options (route and query params)
         // If this is a PUT, POST, or PATCH, req.body is an object
         if (_.isEmpty(object)) {

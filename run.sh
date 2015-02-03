@@ -1,4 +1,4 @@
 #!/bin/bash
 
 clear
-DEBUG=broadcastModel npm start
+npm start

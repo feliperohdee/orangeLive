@@ -108,9 +108,6 @@ function _discoverIndex(indexes, index) {
 function _encodeIndexSet(indexes, set) {
     var result = {};
 
-    // Always delete key
-    delete set.key;
-
     // String Index
     if (indexes.string) {
         _.each(indexes.string, function (attribute, key) {
@@ -139,8 +136,8 @@ function insert(object) {
         // Build Insert object
         return {
             set: _.extend(object.set, {
-                _namespace: object.namespace,
-                _key: '-' + cuid() // Generate new key
+                _namespace: [object.account, object.table].join('/'),
+                _key: '-' + cuid() // Generate new key on insert
             })
         };
     }).then(function (insertObject) {
@@ -159,7 +156,14 @@ function insert(object) {
         return insertObject;
     }).then(function (insertObject) {
         // Broadcast Operation
-        //_sendBroadcast('insert', insertObject.set);
+        broadcastModel.publish({
+            sendTo: [
+                [object.account, object.table].join('/'), // Collection channel
+                [object.account, object.table, object.key].join('/') // Item channel
+            ],
+            data: _normalizeReponseData(insertObject.set),
+            operation: 'insert'
+        });
 
         return insertObject;
     }).then(function (insertObject) {
@@ -169,26 +173,24 @@ function insert(object) {
         } catch (err) {
             throw err;
         }
-
     });
 }
 
 // # Item Operation
 function item(object) {
     return Promise.try(function () {
+        // Validate 
+        if (!object.key) {
+            throw new Error('validationError: No valid keys provided. Please specify primary key field.');
+        }
+    }).then(function () {
         // Define item object
         return {
             where: {
-                _namespace: object.namespace
+                _namespace: [object.account, object.table].join('/'),
+                _key: object.key
             }
         };
-    }).then(function (itemObject) {
-        // Define default key
-        if (object.key) {
-            itemObject.where._key = object.key;
-        }
-
-        return itemObject;
     }).then(function (itemObject) {
         // Define Select
         if (object.select) {
@@ -217,6 +219,29 @@ function item(object) {
     });
 }
 
+// # Normalize Response Data
+// - Replace _key for key
+// - Remove useless data for user
+function _normalizeReponseData(data) {
+    // New reference is required to never influence in another operation
+    var _data = _.clone(data);
+
+    if (_data._key) {
+        // Replace _key for key
+        _data.key = data._key;
+    }
+
+    delete _data._key;
+    delete _data._namespace;
+    delete _data._pi; // Priority index
+    delete _data._si0; // String index 0
+    delete _data._si1; // String index 1
+    delete _data._ni0; // Number index 0
+    delete _data._ni1; // Number index 1
+
+    return _data;
+}
+
 // # Query Operation
 function query(object) {
     return Promise.try(function () {
@@ -227,7 +252,7 @@ function query(object) {
             limit: object.limit,
             startAt: object.startAt,
             where: {
-                _namespace: ['=', object.namespace]
+                _namespace: ['=', [object.account, object.table].join('/')]
             }
         };
     }).then(function (queryObject) {
@@ -365,29 +390,6 @@ function query(object) {
     });
 }
 
-// # Normalize Response Data
-// - Replace _key for key
-// - Remove useless data for user
-function _normalizeReponseData(data) {
-    // New reference is required to never influence in another operation
-    var _data = _.clone(data);
-
-    if (_data._key) {
-        // Replace _key for key
-        _data.key = data._key;
-    }
-
-    delete _data._key;
-    delete _data._namespace;
-    delete _data._pi; // Priority index
-    delete _data._si0; // String index 0
-    delete _data._si1; // String index 1
-    delete _data._ni0; // Number index 0
-    delete _data._ni1; // Number index 1
-
-    return _data;
-}
-
 // # Update Operation
 function update(object) {
     return Promise.try(function () {
@@ -400,7 +402,7 @@ function update(object) {
         return {
             set: object.set,
             where: {
-                _namespace: object.namespace,
+                _namespace: [object.account, object.table].join('/'),
                 _key: object.key
             }
         };
@@ -469,15 +471,20 @@ function update(object) {
 
         return updateObject;
     }).then(function (updateObject) {
-        // Broadcast Operation {data is extended because other side needs to receive updateObject.where}
+        // Broadcast Operation
         var operation = 'update' + (object.special ? ':' + object.special : '');
-        var data = _.extend({}, _.isObject(updateObject.set) ? updateObject.set : object.set, updateObject.where);
+        // Set can be an expression, so, we need treat this
+        var data = _.isObject(updateObject.set) ? updateObject.set : object.set;
+        // Is important append the key to collections handle data
+        data.key = object.key;
 
         broadcastModel.publish({
-            operation: operation,
-            namespace: object.namespace,
-            key: object.key,
-            data: _normalizeReponseData(data)
+            sendTo: [
+                [object.account, object.table].join('/'), // Collection channel
+                [object.account, object.table, object.key].join('/') // Item channel
+            ],
+            data: _normalizeReponseData(data),
+            operation: operation
         });
 
         return updateObject;

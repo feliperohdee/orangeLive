@@ -1,21 +1,20 @@
 // # Broadcast Model
+var debug = require('debug')('broadcastModel');
 var _ = require('lodash');
 var Promise = require('bluebird');
 var redis = require('redis');
 var url = require('url');
+var msgpack = require('msgpack-js');
 
 // Create redis clients
-var redisSub = redis.createClient(6379, '127.0.0.1');
 var redisPub = redis.createClient(6379, '127.0.0.1');
+var redisSub = redis.createClient(6379, '127.0.0.1', {
+    detect_buffers: true
+});
 
 //
-var channels = {};
-var channelPerClient = {};
-
-// TEMPORARY
-var fromToken = {
-    account: 'dlBSd$ib89$Be2'
-};
+var clientsByChannel = {}; // Retrieve all clients in a channel
+var channelByClient = {}; // Retrieve what channel a client is connected
 
 _construct();
 
@@ -32,98 +31,117 @@ function _construct() {
         var clientUrl = url.parse(clientSocket.upgradeReq.url, true);
         var clientHeaders = clientSocket.upgradeReq.headers;
         var clientId = clientHeaders['sec-websocket-key'];
-        var channel = fromToken.account + clientUrl.pathname;
+        var channelId = clientUrl.pathname.replace(/^\/|\/$/g, ''); // Remove first slash => account/table/{key}
 
-        _subscribeClient(clientId, clientSocket, channel);
+        _subscribeClient(clientId, clientSocket, channelId);
 
         // Handle close connections
         clientSocket.on('close', function () {
             _unsubscribeClient(clientId);
         });
+
+        // Handle inbound messages
+        clientSocket.on('message', function (response) {
+            // Parse response
+            try {
+                response = JSON.parse(response);
+            } catch (err) {
+                return;
+            }
+
+            // Append Channel Id
+            response.sendTo = [channelId];
+
+            // Choose method and handle it
+            switch (response.operation) {
+                case 'stream':
+                    publish(response);
+                    break;
+            }
+        });
     });
 
     // Subscribe to redis broadcast channel
     redisSub.subscribe('broadcast');
-    
+
     // Handle redis broacasts
     redisSub.on('message', function (c, response) {
-        // Parse JSON
-        response = JSON.parse(response);
+        // Decode response
+        response = msgpack.decode(response);
 
-        var channel = response.namespace;
-        var key = response.key;
-        var data = {
+        _dispatch(response.sendTo, {
             operation: response.operation,
             data: response.data
-        };
-
-        // ALWAYS dispatch to just namespace channel {hit collections}
-        _dispatch(channel, data);
-
-        // If key dispatch to namespace + key {hit items}
-        if (key) {
-            _dispatch(channel + '/' + key, data);
-        }
+        });
     });
+}
+
+// # Create Channel
+function _createChannel(channelId) {
+    debug('Channel created ' + channelId);
+    clientsByChannel[channelId] = {};
+}
+
+// # Delete Channel
+function _deleteChannel(channelId) {
+    debug('Channel closed ' + channelId);
+    delete clientsByChannel[channelId];
+}
+
+// # Dispatch
+function _dispatch(sendTo, data) {
+    // Iterate channel to look for clients
+    while (sendTo.length > 0) {
+        //
+        var channelId = sendTo.shift();
+
+        // Test if there are clients in this channelId
+        if (!_.isEmpty(clientsByChannel[channelId])) {
+            // Yes, there are
+            debug('Dispatching to ' + channelId);
+
+            // Get clients inside this channelId
+            _.each(clientsByChannel[channelId], function (clientSocket) {
+                try {
+                    clientSocket.send(JSON.stringify(data));
+                } catch (err) {
+                    debug(err.message);
+                }
+            });
+        }
+    }
 }
 
 // # Publish
 function publish(object) {
-    // Publish in broadcast channel
-    return redisPub.publish('broadcast', JSON.stringify(object));
-}
-
-// # Create Channel
-function _createChannel(channel) {
-    console.log('Channel created', channel);
-    channels[channel] = {};
-}
-
-// # Delete Channel
-function _deleteChannel(channel) {
-    console.log('Channel closed', channel);
-    delete channels[channel];
-}
-
-// # Dispatch
-function _dispatch(channel, data) {
-    // Iterate channel to look for clients
-    //console.log('Dispatching to', channel);
-    if (!_.isEmpty(channels[channel])) {
-        _.each(channels[channel], function (clientSocket) {
-            try {
-                clientSocket.send(JSON.stringify(data));
-            } catch (err) {
-                console.log(err.message);
-            }
-        });
-    }
+    // Encode and publish in broadcast
+    return redisPub.publish('broadcast', msgpack.encode(object));
 }
 
 // # Subscribe Client
-function _subscribeClient(clientId, clientSocket, channel) {
-    // If channel doesn't exists, create it
-    if (!channels[channel]) {
-        _createChannel(channel);
+function _subscribeClient(clientId, clientSocket, channelId) {
+    // If channelId doesn't exists, create it
+    if (!clientsByChannel[channelId]) {
+        _createChannel(channelId);
     }
 
     // Subscribe client
-    console.log('Client created', channel, clientId);
-    channelPerClient[clientId] = channel;
-    channels[channel][clientId] = clientSocket;
+    debug('Client created ' + channelId + ' ' + clientId);
+    channelByClient[clientId] = channelId;
+    clientsByChannel[channelId][clientId] = clientSocket;
 }
 
 // # Unsubscrbe Client
 function _unsubscribeClient(clientId) {
-    // Seek what channel this client is connected
-    var channel = channelPerClient[clientId];
+    // Seek what channelId this client is connected
+    var channelId = channelByClient[clientId];
 
-    // Delete client from channel
-    console.log('Client closed', channel, clientId);
-    delete channels[channel][clientId];
+    // Delete client from channelId
+    debug('Client closed ' + channelId, clientId);
+    delete clientsByChannel[channelId][clientId];
 
-    // Test if there are more clients in this channel, if no, delete it too
-    if (_.isEmpty(channels[channel])) {
-        _deleteChannel(channel);
+    // Test if there are more clients in this channelId, if no, delete it too
+    if (_.isEmpty(clientsByChannel[channelId])) {
+        _deleteChannel(channelId);
     }
 }

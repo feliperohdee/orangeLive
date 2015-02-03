@@ -68,7 +68,7 @@ function add() {
 var instance2 = new orangeLive('dlBSd$ib89$Be2/users/rohde1').on('load', function (data) {
     //console.log('instance 2', data.value());
 }).on('save', function (data) {
-    console.log('instance 2 On save Event', data);
+    //console.log('instance 2 On save Event', data);
 });
 
 function update() {
@@ -120,11 +120,11 @@ function decrement() {
 //        }
 //    });
 //}
-//
-//function getRandomInt(min, max) {
-//    return Math.floor(Math.random() * (max - min)) + min;
-//}
-//
+
+function getRandomInt(min, max) {
+    return Math.floor(Math.random() * (max - min)) + min;
+}
+
 function updateView(data) {
     $('body').find('table tbody').html('');
     $('body').find('#data').html('');

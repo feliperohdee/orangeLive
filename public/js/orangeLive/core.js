@@ -6,7 +6,8 @@ function orangeLive(address) {
     var self = this;
 
     self.addressPath = {
-        namespace: address.split('/')[1] || false,
+        account: address.split('/')[0] || false,
+        table: address.split('/')[1] || false,
         key: address.split('/')[2] || false
     };
 

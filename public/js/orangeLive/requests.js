@@ -2,6 +2,7 @@
 orangeLive.prototype.requests = function () {
     //
     var self = this;
+    var ws;
 
     _subscribe();
 
@@ -33,97 +34,8 @@ orangeLive.prototype.requests = function () {
         });
     }
 
-    // # Set {insert, remove and update}
-    function _set(operation, params, onComplete) {
-        //
-        var methodsMap = {
-            insert: 'push',
-            remove: 'delete',
-            update: 'put'
-        };
-
-        //
-        $.ajax({
-            contentType: 'application/json',
-            data: params ? JSON.stringify(params) : false,
-            method: methodsMap[operation],
-            url: '/api/' + _makeURL()
-        }).then(function (response) {
-            // onComplete callback
-            if (onComplete) {
-                onComplete(response);
-            }
-        }).fail(function (err) {
-            // onComplete callback
-            if (onComplete) {
-                onComplete(false, {
-                    status: err.status,
-                    message: err.responseJSON
-                });
-            }
-        });
-    }
-
-    // # Subscribe {listen sockets}
-    function _subscribe() {
-        //
-        var url = 'ws://' + window.document.location.host + '/' + self.addressPath.namespace;
-        var ws;
-
-        _connect();
-        _listen();
-
-        /*======================*/
-
-        function _connect() {
-            //
-            console.log('connecting');
-
-            ws = new WebSocket(url);
-        }
-
-        function _listen() {
-            ws.onopen = function () {
-                console.log('Ws Opened');
-            };
-
-            ws.onclose = function () {
-                console.log('Ws Closed');
-
-                // Try reconnect
-                setTimeout(_connect, 1500);
-            };
-
-            ws.onerror = function () {
-                console.log('Ws Error');
-            };
-
-            ws.onmessage = function (response) {
-                // Parse response
-                response = JSON.parse(response.data);
-
-                if (!_.isEmpty(response)) {
-                    self.responsesManager.dispatch(response.operation, response.data);
-                }
-            };
-        }
-    }
-
-    // # Make URL
-    function _makeURL(key) {
-        //
-        var url = self.addressPath.namespace;
-
-        // Append a key if exists
-        if (self.addressPath.key || key) {
-            url += '/' + self.addressPath.key || key;
-        }
-
-        return url;
-    }
-
     // # Request Insert
-    function insert(params) {
+    function insert(params, callback) {
         var insertParams = {};
 
         if (params.priority)
@@ -132,7 +44,7 @@ orangeLive.prototype.requests = function () {
         if (params.set)
             insertParams.set = params.set;
 
-        _set('insert', insertParams);
+        _set('insert', insertParams, callback);
     }
 
     // # Request Item
@@ -146,6 +58,19 @@ orangeLive.prototype.requests = function () {
             itemParams.select = params.select;
 
         _fetch('item', itemParams);
+    }
+
+    // # Make URL
+    function _makeURL(key) {
+        //
+        var url = self.addressPath.account + '/' + self.addressPath.table;
+
+        // Append a key if exists
+        if (self.addressPath.key || key) {
+            url += '/' + self.addressPath.key || key;
+        }
+
+        return url;
     }
 
     // # Request Query
@@ -177,6 +102,82 @@ orangeLive.prototype.requests = function () {
             queryParams.startAt = params.startAt;
 
         _fetch('query', queryParams);
+    }
+
+    // # Set {insert, remove and update}
+    function _set(operation, params, onComplete) {
+        //
+        var methodsMap = {
+            insert: 'post',
+            remove: 'delete',
+            update: 'put'
+        };
+
+        //
+        $.ajax({
+            contentType: 'application/json',
+            data: params ? JSON.stringify(params) : false,
+            method: methodsMap[operation],
+            url: '/api/' + _makeURL()
+        }).then(function (response) {
+            // onComplete callback
+            if (onComplete) {
+                onComplete(response);
+            }
+        }).fail(function (err) {
+            // onComplete callback
+            if (onComplete) {
+                onComplete(false, {
+                    status: err.status,
+                    message: err.responseJSON
+                });
+            }
+        });
+    }
+
+    // # Stream {stream without persistence, is called direct os websocket layer}
+    function stream(data) {
+        ws.send(JSON.stringify({
+            operation: 'stream',
+            data: data
+        }));
+    }
+
+    // # Subscribe {listen sockets}
+    function _subscribe() {
+        //
+        var url = 'ws://' + window.document.location.host + '/' + _makeURL();
+
+        _connect();
+
+        /*======================*/
+
+        function _connect() {
+            //
+            ws = new WebSocket(url);
+
+            ws.onopen = function () {
+                _listen();
+                
+                stream({name: 'heron'});
+            };
+        }
+
+        function _listen() {
+            ws.onclose = function () {
+                // Try reconnect
+                setTimeout(_connect, 1500);
+            };
+
+            ws.onmessage = function (response) {
+                // Parse response
+                response = JSON.parse(response.data);
+
+                if (!_.isEmpty(response)) {
+                    self.responsesManager.dispatch(response.operation, response.data);
+                }
+            };
+        }
     }
 
     // # Request Update

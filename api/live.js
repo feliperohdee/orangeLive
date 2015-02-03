@@ -1,11 +1,9 @@
 // # Live API
-var _ = require('lodash');
 var liveModel = require('../models/live');
 var broadcastModel = require('../models/broadcast');
-var tempAccount = 'dlBSd$ib89$Be2';
+var _ = require('lodash');
 
 var fromToken = {
-    account: 'dlBSd$ib89$Be2',
     indexes: {
         string: ['name'],
         number: ['height', 'age']
@@ -16,16 +14,17 @@ module.exports = {
     insert: insert,
     item: item,
     query: query,
-    update: update,
+    update: update
 };
 
 /* ======================================================================== */
 
 // # Insert
-function insert(object) {
-    // Temporary
-    object.namespace = fromToken.account + '/' + object.namespace;
-    object.indexes = fromToken.indexes;
+function insert(object, options) {
+    // Extend object with options n' indexes
+    _.extend(object, options, {
+        indexes: fromToken.indexes
+    });
 
     return liveModel.insert(object).then(function (response) {
         return response;
@@ -36,9 +35,7 @@ function insert(object) {
 
 // # Item
 function item(object) {
-    // Temporary
-    object.namespace = fromToken.account + '/' + object.namespace;
-
+    //
     return liveModel.item(object).then(function (response) {
         return response;
     }).catch(function (err) {
@@ -48,8 +45,7 @@ function item(object) {
 
 // # Query
 function query(object) {
-    // temporary
-    object.namespace = tempAccount + '/' + object.namespace;
+    // Temporary
     object.indexes = fromToken.indexes;
 
     return liveModel.query(object).then(function (response) {
@@ -61,13 +57,12 @@ function query(object) {
 
 // # Update
 function update(object, options) {
-    // Temporary
-    _.extend(object, options);
+    // Extend object with options n' indexes
+    _.extend(object, options, {
+        indexes: fromToken.indexes
+    });
 
-    object.namespace = fromToken.account + '/' + object.namespace;
-    object.indexes = fromToken.indexes;
-
-    return liveModel.update(object, options).then(function (response) {
+    return liveModel.update(object).then(function (response) {
         return response;
     }).catch(function (err) {
         throw err.message;

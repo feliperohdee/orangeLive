@@ -7,6 +7,7 @@ orangeLive.prototype.requests = function () {
     _subscribe();
 
     return{
+        del: del,
         insert: insert,
         item: item,
         stream: stream,
@@ -15,6 +16,11 @@ orangeLive.prototype.requests = function () {
     };
 
     /*=========================*/
+
+    // # Request Del
+    function del(params) {
+        _set('del', params);
+    }
 
     // # Fetch {query and item}
     function _fetch(operation, params) {
@@ -36,16 +42,16 @@ orangeLive.prototype.requests = function () {
     }
 
     // # Request Insert
-    function insert(params, callback) {
+    function insert(params) {
         var insertParams = {};
 
-        if (params.priority)
+        if (_.isNumber(params.priority))
             insertParams.priority = params.priority;
 
         if (params.set)
             insertParams.set = params.set;
 
-        _set('insert', insertParams, callback);
+        _set('insert', insertParams);
     }
 
     // # Request Item
@@ -110,14 +116,16 @@ orangeLive.prototype.requests = function () {
         //
         var url;
         var methodsMap = {
+            del: 'delete',
             insert: 'post',
-            remove: 'delete',
             update: 'put'
         };
 
-        // If collection try to update an item emulate url with key
-        if (params.key) {
+        // If collection try to update an item emulating url with key
+        if (params && params.key) {
             url = _makeURL(params.key);
+            // Always delete params.key, it only be passed via URL params
+            delete params.key;
         } else {
             url = _makeURL();
         }
@@ -185,7 +193,7 @@ orangeLive.prototype.requests = function () {
     }
 
     // # Request Update
-    function update(params, callback) {
+    function update(params) {
         var updateParams = {};
 
         // params.key should be used only by insert function, 
@@ -193,7 +201,7 @@ orangeLive.prototype.requests = function () {
         if (params.key)
             updateParams.key = params.key;
 
-        if (params.priority)
+        if (_.isNumber(params.priority))
             updateParams.priority = params.priority;
 
         if (params.set)
@@ -202,6 +210,6 @@ orangeLive.prototype.requests = function () {
         if (params.special)
             updateParams.special = params.special;
 
-        _set('update', updateParams, callback);
+        _set('update', updateParams);
     }
 };

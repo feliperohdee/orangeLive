@@ -2,7 +2,7 @@
 orangeLive.prototype.item = function () {
     //
     'use strict';
-    
+
     var self = this;
     var _dataSet = {};
     var _events = {};
@@ -29,9 +29,12 @@ orangeLive.prototype.item = function () {
             increment: increment,
             on: on,
             pushList: pushList,
+            removeAttr: removeAttr,
+            remove: remove,
             save: save,
             saveWithCondition: saveWithCondition,
-            select: select
+            select: select,
+            setPriority: setPriority
         };
 
         /*--------------------------------------*/
@@ -39,11 +42,15 @@ orangeLive.prototype.item = function () {
         // # Decrement, ALIAS for -atomicUpdate
         function decrement(attribute, value) {
             requestSpecialUpdate('atomic', attribute, -Math.abs(value || 1));
+
+            return this;
         }
 
         // # Increment, ALIAS for +atomicUpdate
         function increment(attribute, value) {
             requestSpecialUpdate('atomic', attribute, Math.abs(value || 1));
+
+            return this;
         }
 
         // # On
@@ -56,6 +63,22 @@ orangeLive.prototype.item = function () {
         // # Push List
         function pushList(attribute, value) {
             requestSpecialUpdate('push', attribute, value);
+
+            return this;
+        }
+
+        // # Remove attribute
+        function removeAttr(attribute) {
+            requestSpecialUpdate('removeAttr', attribute);
+
+            return this;
+        }
+
+        // # Remove
+        function remove() {
+            requestRemove();
+
+            return this;
         }
 
         // # Save {insert (via update operation) or update}
@@ -93,6 +116,13 @@ orangeLive.prototype.item = function () {
 
             return this;
         }
+
+        // # Set Priority
+        function setPriority(priority) {
+            requestSave({}, priority);
+
+            return this;
+        }
     }
 
     // # Get Callback {test if data belongs to item and return callback is exists}
@@ -123,9 +153,15 @@ orangeLive.prototype.item = function () {
         });
     }
 
+    // # Request Remove
+    function requestRemove() {
+        // Delete
+        self.requestsManager.del();
+    }
+
     // # Request Save {insert (via update method) or update)}
     function requestSave(set, priority) {
-        // Otherwise update
+        // Update
         self.requestsManager.update({
             priority: priority,
             set: set
@@ -152,11 +188,18 @@ orangeLive.prototype.item = function () {
                     return;
                 }
                 break;
+            case 'removeAttr':
+                // test if attribute exists
+                if (_.isNull(currentValue)) {
+                    console.error('You can\'t remove a non EXISTENT attribute.');
+                    return;
+                }
+                break;
         }
 
         // Update set
         var set = {};
-        set[attribute] = value;
+        set[attribute] = value || null;
 
         // Request update
         self.requestsManager.update({
@@ -166,13 +209,24 @@ orangeLive.prototype.item = function () {
     }
 
     // # Save Datset
-    function saveDataSet(data) {
+    function saveDataSet(data, mode) {
         // If select, remove extras
         if (_select) {
             data = self.helpers.removeNonSelected(data, _select);
         }
 
-        // Update Item
-        _.extend(_dataSet, data);
+        switch (mode) {
+            case 'remove':
+                // Remove all data
+                _dataSet = {};
+                break;
+            case 'strict':
+                // Replace all data
+                _dataSet = data;
+                break;
+            default:
+                // Just extend old with new data
+                _.extend(_dataSet, data);
+        }
     }
 };

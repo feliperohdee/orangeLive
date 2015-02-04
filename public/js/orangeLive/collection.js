@@ -54,6 +54,7 @@ orangeLive.prototype.collection = function () {
             limit: limit,
             on: on,
             or: or,
+            remove: remove,
             save: save,
             select: select,
             startAt: startAt,
@@ -126,8 +127,8 @@ orangeLive.prototype.collection = function () {
 
         // # Indexed By {Define index to be used}
         function indexedBy(index) {
-            // Test if index is defined
-            if (self.indexes.string.indexOf(index) < 0 && self.indexes.number.indexOf(index) < 0) {
+            // Test if index is defined and no equals priority
+            if (self.indexes.string.indexOf(index) < 0 && self.indexes.number.indexOf(index) < 0 && index !== 'priority') {
                 console.error('The index %s is not defined, the collection won\'t be ordenated or fetched by this index.', index);
             }
 
@@ -168,6 +169,13 @@ orangeLive.prototype.collection = function () {
         // Or, ALIAS to filter with OR param
         function or(attribute, operation, value) {
             filter(attribute, operation, value, true);
+
+            return this;
+        }
+
+        // # Remove
+        function remove(key) {
+            requestRemove(key);
 
             return this;
         }
@@ -314,6 +322,14 @@ orangeLive.prototype.collection = function () {
         });
     }
 
+    // # Request Remove
+    function requestRemove(key) {
+        // Delete
+        self.requestsManager.del({
+            key: key
+        });
+    }
+
     // # Save {insert or update}
     function requestSave(set, priority) {
         // If no key provided, insert
@@ -336,7 +352,7 @@ orangeLive.prototype.collection = function () {
     }
 
     // # Save Dataset
-    function saveDataSet(data) {
+    function saveDataSet(data, mode) {
         // If select, remove extras
         if (_select) {
             data = self.helpers.removeNonSelected(data, _select);
@@ -344,13 +360,21 @@ orangeLive.prototype.collection = function () {
 
         // Get index
         var dataIndex = _.findIndex(_dataSet, {key: data.key});
+        var isRemove = mode === 'remove';
+        var isStrict = mode === 'strict';
 
-        if (testCondition(data) && testFilter(data)) {
-            // Test OK, update data if key already exists, otherwise push
-            // (collection.save might insert or update)
+        // if not remove and pass in condition and filter tests
+        if (!isRemove && testCondition(data) && testFilter(data)) {
+            // Test OK, update data if key already exists, otherwise push it
             if (dataIndex >= 0) {
-                // Update Item
-                _.extend(_dataSet[dataIndex], data);
+                // Update Item in Collection
+                if (isStrict) {
+                    // Replace all data
+                    _dataSet[dataIndex] = data;
+                } else {
+                    // Just extend old with new data
+                    _.extend(_dataSet[dataIndex], data);
+                }
             } else {
                 // Push Item
                 _dataSet.push(data);
@@ -359,7 +383,7 @@ orangeLive.prototype.collection = function () {
             // Sort and Limit
             _dataSet = sortAndLimit(_dataSet);
         } else {
-            // Test NOT OK, remove data if exists
+            // Test NOT OK or is remove, remove data
             if (dataIndex >= 0) {
                 _dataSet.splice(dataIndex, 1);
             }

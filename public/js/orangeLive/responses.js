@@ -25,15 +25,21 @@ orangeLive.prototype.responses = function () {
                 self.instance.saveDataSet(response);
                 goEvent(['fetch', 'save', 'save:update'], response);
                 break;
+            case 'del':
+                // Remove Collection/Item Dataset
+                self.instance.saveDataSet(response, 'remove');
+                goEvent(['fetch', 'remove'], response);
+                break;
             case 'update:atomic':
             case 'update:push':
+            case 'update:removeAttr':
                 // Get atomic or push
                 var specialOperation = operation.split(':')[1];
                 var value = self.instance.handleSpecialOperation(specialOperation, response);
 
                 if (value) {
                     // Update Collection/Item Dataset
-                    self.instance.saveDataSet(value);
+                    self.instance.saveDataSet(value, (specialOperation === 'removeAttr') ? 'strict' : '');
                     goEvent(['fetch', 'save', 'save:update'], value);
                 }
                 break;

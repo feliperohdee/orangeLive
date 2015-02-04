@@ -170,8 +170,8 @@ var helpers = {
         return result;
     },
     encodeAttribute: function (attr) {
-        // If not illegal number, force it to be a NUMBER type, not STRING
-        if (!isNaN(attr)) {
+        // If not empty and not illegal number, force it to be a NUMBER type, not STRING
+        if (!_.isEmpty(attr) && !isNaN(attr)) {
             attr = parseFloat(attr);
         }
 

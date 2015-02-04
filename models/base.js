@@ -6,6 +6,7 @@ _createTables();
 _createSchema();
 
 module.exports = {
+    del: del,
     insert: insert,
     item: item,
     query: query,
@@ -67,6 +68,17 @@ function _createTables() {
     }).then(function () {
         return returnData;
     });
+}
+
+// # Del
+function del(params) {
+
+    var del = dynamodb.del.item('tblLive1');
+
+    if (params.where)
+        del.where(params.where);
+
+    return del.exec();
 }
 
 // # Insert

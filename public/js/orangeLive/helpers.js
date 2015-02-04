@@ -36,6 +36,10 @@ orangeLive.prototype.helpers = function () {
 
                     return setObjectValue(dataSetClone, attribute, newList);
                     break;
+                case 'removeAttr':
+                    delete dataSetClone[attribute];
+                    return dataSetClone;
+                    break;
             }
         }
 
@@ -55,7 +59,7 @@ orangeLive.prototype.helpers = function () {
                 saveFn(set, priority);
             },
             value: function (key) {
-                return key ? getObjectValue(data, key) : _.omit(data, 'key');
+                return key ? getObjectValue(data, key) : _.omit(data, ['key', 'priority']);
             }
         };
     }

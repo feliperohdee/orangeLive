@@ -11,6 +11,7 @@ var fromToken = {
 };
 
 module.exports = {
+    del: del,
     insert: insert,
     item: item,
     query: query,
@@ -18,6 +19,16 @@ module.exports = {
 };
 
 /* ======================================================================== */
+
+// # Del
+function del(object) {
+    //
+    return liveModel.del(object).then(function (response) {
+        return response;
+    }).catch(function (err) {
+        throw err.message;
+    });
+}
 
 // # Insert
 function insert(object, options) {

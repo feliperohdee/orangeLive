@@ -1,5 +1,5 @@
 // # App
-var instance = new orangeLive('dlBSd$ib89$Be2/users').last(5).select('age').indexedBy('age').on('load', function (data, count, pagination) {
+var instance = new orangeLive('dlBSd$ib89$Be2/users').on('load', function (data, count, pagination) {
     //console.log('instance 1', data);
     //console.log('instance 1 count', count);
 
@@ -19,19 +19,27 @@ var instance = new orangeLive('dlBSd$ib89$Be2/users').last(5).select('age').inde
 
     if (_.isArray(data)) {
         _.each(data, function (item) {
-            if (item.key() === 'rohde5') {
-                setTimeout(function () {
-                    item.save({
-                        age: item.value('age') - 1
-                    });
-                }, 1000);
+            if (item.key() === 'rohde1') {
+                /*
+                 setTimeout(function () {
+                 item.save({
+                 age: item.value('age') - 10
+                 });
+                 }, 1000);
+                 */
             }
         });
     } else {
+        /*
+         setTimeout(function () {
+         data.save({
+         age: data.value('age') + 1
+         });
+         }, 1000);
+         */
+
         setTimeout(function () {
-            data.save({
-                age: data.value('age') + 1
-            });
+            instance.remove(item.key());
         }, 1000);
     }
 
@@ -53,7 +61,7 @@ function add() {
         name: 'Rohde Test',
         height: getRandomInt(10, 90),
         age: getRandomInt(105, 110),
-        address: 'floripa',
+        address: '',
         array: ['c', 'b'],
         map: {
             age: 0,
@@ -67,7 +75,7 @@ var instance2 = new orangeLive('dlBSd$ib89$Be2/users/rohde1').on('load', functio
     //console.log('instance 2', data.value());
 
     setTimeout(function () {
-        instance2.stream({name: 'rohde'});
+        //instance2.remove();
     }, 1000);
 
 }).on('save', function (data) {
@@ -78,10 +86,10 @@ var instance2 = new orangeLive('dlBSd$ib89$Be2/users/rohde1').on('load', functio
 
 function update() {
     instance2.save({
-        name: 'Rohde Test',
+        name: 'Rohde',
         height: getRandomInt(10, 90),
         age: getRandomInt(105, 110),
-        address: 'floripa',
+        address: 'Floripa',
         array: ['c'],
         map: {
             age: 100,
@@ -104,7 +112,7 @@ function pushList() {
     instance2.pushList('array', 'pqna');
 }
 
-var instance3 = new orangeLive('dlBSd$ib89$Be2/users/rohde1').on('load', function (data) {
+var instance3 = new orangeLive('dlBSd$ib89$Be2/users/rohde5').on('load', function (data) {
     //console.log('instance 3', data);
 }).on('save', function (data) {
     console.log('instance 3 On save Event', data);

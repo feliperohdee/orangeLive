@@ -6,6 +6,7 @@ var broadcastModel = require('../models/broadcast');
 var cuid = new require('cuid');
 
 module.exports = {
+    del: del,
     insert: insert,
     item: item,
     query: query,
@@ -78,6 +79,42 @@ function _buildAlias(names, values) {
     return result;
 }
 
+// # Del Operation
+function del(object) {
+    return Promise.try(function () {
+        // Validate 
+        if (!object.key) {
+            throw new Error('validationError: No valid keys provided. Please specify primary key field.');
+        }
+    }).then(function () {
+        // Define del object
+        return {
+            where: {
+                _namespace: [object.account, object.table].join('/'),
+                _key: object.key
+            }
+        };
+    }).then(function (delObject) {
+        // Broadcast Operation
+        broadcastModel.publish({
+            sendTo: [
+                [object.account, object.table].join('/'), // Collection channel
+                [object.account, object.table, object.key].join('/') // Item channel
+            ],
+            data: _normalizeReponseData(delObject.where),
+            operation: 'del'
+        });
+
+        return delObject;
+    }).then(function (delObject) {
+        try {
+            return base.del(delObject);
+        } catch (err) {
+            throw err;
+        }
+    });
+}
+
 // # Discover Index
 function _discoverIndex(indexes, index) {
     //
@@ -142,7 +179,7 @@ function insert(object) {
         };
     }).then(function (insertObject) {
         // Append priority if exists
-        if (object.priority) {
+        if (_.isNumber(object.priority)) {
             insertObject.set._pi = object.priority;
         }
 
@@ -221,6 +258,7 @@ function item(object) {
 
 // # Normalize Response Data
 // - Replace _key for key
+// - Replace _pi for priority
 // - Remove useless data for user
 function _normalizeReponseData(data) {
     // New reference is required to never influence in another operation
@@ -229,6 +267,11 @@ function _normalizeReponseData(data) {
     if (_data._key) {
         // Replace _key for key
         _data.key = data._key;
+    }
+
+    if (_.isNumber(_data._pi)) {
+        // Replace _pi for priority
+        _data.priority = data._pi;
     }
 
     delete _data._key;
@@ -264,7 +307,10 @@ function query(object) {
         return queryObject;
     }).then(function (queryObject) {
         // Define Indexes
-        if (object.indexedBy && object.indexes) {
+        if (object.indexedBy === 'priority') {
+            // Set indexed by
+            queryObject.indexedBy = 'priorityIndex';
+        } else if (object.indexedBy && object.indexes) {
             // Discover and get Index
             var index = _discoverIndex(object.indexes, object.indexedBy);
 
@@ -415,7 +461,7 @@ function update(object) {
         return updateObject;
     }).then(function (updateObject) {
         // Append priority if exists
-        if (object.priority) {
+        if (_.isNumber(object.priority)) {
             updateObject.set._pi = object.priority;
         }
 
@@ -459,6 +505,17 @@ function update(object) {
                         // Expression for SS or NS
                         expression = 'ADD ' + alias.map.names[0] + ' ' + alias.map.values[0];
                     }
+                    break;
+                case 'removeAttr':
+                    // Build Alias
+                    alias = _buildAlias(_.keys(updateObject.set));
+
+                    if (!alias) {
+                        throw new Error('Invalid attribute.');
+                    }
+
+                    // Build expression and define update param
+                    expression = 'REMOVE ' + alias.map.names[0];
                     break;
             }
 

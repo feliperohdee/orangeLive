@@ -109,6 +109,7 @@ function item(table) {
  */
 function items(table) {
     //
+    var parallel = false;
     var paramsArray = [];
     var returnData = [];
 
@@ -126,8 +127,6 @@ function items(table) {
 
     // # Exec
     function exec() {
-        var requests = [];
-
         //Define Batch Function
         var _batchFn = function (params) {
             return new Promise(function (resolve, reject) {
@@ -141,17 +140,32 @@ function items(table) {
             });
         };
 
-        // Define requests with divided parameters
-        _.each(paramsArray, function (params) {
-            requests.push(_batchFn(params));
-        });
+        if (parallel) {
+            // Parallel
+            var requests = [];
 
-        return Promise.all(requests).then(function (response) {
-            return {
-                data: returnData,
-                response: response
-            };
-        });
+            // Define requests with divided parameters
+            _.each(paramsArray, function (params) {
+                requests.push(_batchFn(params));
+            });
+
+            return Promise.all(requests).then(function (response) {
+                return {
+                    data: returnData,
+                    response: response
+                };
+            });
+        } else {
+            // Serialized
+            return Promise.each(paramsArray, function (params) {
+                return _batchFn(params);
+            }).then(function (response) {
+                return {
+                    data: returnData,
+                    response: response
+                };
+            });
+        }
     }
 
     // # Request Set

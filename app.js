@@ -27,6 +27,7 @@ global.ws = ws;
 var path = require('path');
 var favicon = require('serve-favicon');
 var logger = require('morgan');
+var errors = require('./errors');
 var bodyParser = require('body-parser');
 var hbs = require('hbs');
 var middleware = require('./middleware');
@@ -43,9 +44,6 @@ app.engine('html', hbs.__express);
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: false}));
 app.use(express.static(path.join(__dirname, 'public')));
-
-//Custom Error
-app.use('/error', middleware.errors.customError);
 
 /*===========================*/
 

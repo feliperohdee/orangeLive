@@ -2,7 +2,8 @@
 var _ = require('lodash');
 var Promise = require('bluebird');
 var base = require('./base');
-var broadcastModel = require('../models/broadcast');
+var broadcastModel = require('./broadcast');
+var securityModel = require('./security');
 var cuid = new require('cuid');
 
 module.exports = {
@@ -82,10 +83,8 @@ function _buildAlias(names, values) {
 // # Del Operation
 function del(object) {
     return Promise.try(function () {
-        // Validate 
-        if (!object.key) {
-            throw new Error('validationError: No valid keys provided. Please specify primary key field.');
-        }
+        // Validations 
+        securityModel.hasKey(object);
     }).then(function () {
         // Define del object
         return {
@@ -170,6 +169,9 @@ function _encodeIndexSet(indexes, set) {
 // # Insert Operation
 function insert(object) {
     return Promise.try(function () {
+        // Validations
+        securityModel.canWrite(object);
+    }).then(function () {
         // Build Insert object
         return {
             set: _.extend(object.set, {
@@ -216,10 +218,8 @@ function insert(object) {
 // # Item Operation
 function item(object) {
     return Promise.try(function () {
-        // Validate 
-        if (!object.key) {
-            throw new Error('validationError: No valid keys provided. Please specify primary key field.');
-        }
+        // Validations
+        securityModel.hasKey(object);
     }).then(function () {
         // Define item object
         return {
@@ -439,10 +439,10 @@ function query(object) {
 // # Update Operation
 function update(object) {
     return Promise.try(function () {
-        // Validate 
-        if (!object.key) {
-            throw new Error('validationError: No valid keys provided. Please specify primary key field.');
-        }
+        // Validations
+        securityModel.hasKey(object);
+        securityModel.canWrite(object);
+
     }).then(function () {
         // Define update object
         return {

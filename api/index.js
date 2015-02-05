@@ -17,12 +17,12 @@ module.exports = {
 
 function http(apiMethod) {
     return function (req, res) {
-        var response = {};
+        var result = {};
 
         // We define 2 properties for using as arguments in API calls:
         var object = req.body;
         var options = _.extend({}, req.files, req.query, req.params);
-        
+
         // If this is a GET, or a DELETE, req.body should be null, so we only have options (route and query params)
         // If this is a PUT, POST, or PATCH, req.body is an object
         if (_.isEmpty(object)) {
@@ -30,36 +30,21 @@ function http(apiMethod) {
             options = {};
         }
 
-        return apiMethod(object, options).then(function (result) {
-            //If not apiData, wrap it
-            if (!result.apiData) {
-                result = {
-                    apiData: result
-                };
-            }
-            
-            //If not apiStatus, append it with default HTTP:200 OK
-            if (!result.apiStatus) {
-                result.apiStatus = 200;
-            }
-
-            response = result;
+        return apiMethod(object, options).then(function (response) {
+            result = {
+                data: response,
+                status: 200
+            };
         }).catch(function (err) {
-            //If not apiData, wrap it
-            if (!err.apiData) {
-                err = {
-                    apiData: err
-                };
-            }
-            
-            //If not apiStatus, append it with default HTTP:%00 Server Inernal Error
-            if (!err.apiStatus) {
-                err.apiStatus = 500;
-            }
-            
-            response = err;
+            result = {
+                data: {
+                    message: err.message,
+                    explanation: err.explanation || null
+                },
+                status: err.status || 500
+            };
         }).finally(function () {
-            res.status(response.apiStatus).json(response.apiData || {});
+            res.status(result.status).json(result.data || {});
         });
     };
 }

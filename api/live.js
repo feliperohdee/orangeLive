@@ -2,13 +2,6 @@
 var liveModel = require('../models/live');
 var _ = require('lodash');
 
-var fromToken = {
-    indexes: {
-        string: ['name'],
-        number: ['height', 'age']
-    }
-};
-
 module.exports = {
     del: del,
     insert: insert,
@@ -28,9 +21,7 @@ function del(object) {
 // # Insert
 function insert(object, options) {
     // Extend object with options n' indexes
-    _.extend(object, options, {
-        indexes: fromToken.indexes
-    });
+    _.extend(object, options);
 
     return liveModel.insert(object);
 }
@@ -43,18 +34,14 @@ function item(object) {
 
 // # Query
 function query(object) {
-    // Temporary
-    object.indexes = fromToken.indexes;
-
+    //
     return liveModel.query(object);
 }
 
 // # Update
 function update(object, options) {
     // Extend object with options n' indexes
-    _.extend(object, options, {
-        indexes: fromToken.indexes
-    });
+    _.extend(object, options);
 
     return liveModel.update(object);
 }

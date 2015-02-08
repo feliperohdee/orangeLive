@@ -16,3 +16,19 @@ errors.create({
     defaultMessage: 'Missing Key.',
     defaultExplanation: 'No valid keys were provided. Please specify primary key field.'
 });
+
+// # Schema Keys Error
+errors.create({
+    name: 'outOfKeysError',
+    code: 400,
+    defaultMessage: 'Out of Keys Error.',
+    defaultExplanation: 'One or more provided keys is/are disallowed and out of schema keys.'
+});
+
+// # Schema Rules Error
+errors.create({
+    name: 'outOfRulesError',
+    code: 400,
+    defaultMessage: 'Out of Schema Rules Error.',
+    defaultExplanation: 'One or more provided values is/are disallowed and out of schema rules.'
+});

@@ -6,6 +6,28 @@ var broadcastModel = require('./broadcast');
 var securityModel = require('./security');
 var cuid = new require('cuid');
 
+// Dynamoc Load
+var rules = {
+    users: {
+        // # Access Control List
+        acl: {
+            _write: 'auth.id',
+            _read: 'value.id === auth.id'
+        },
+        // # Indexes
+        indexes: {
+            string: ['name'],
+            number: ['height', 'age']
+        },
+        // # Schema
+        schema: {
+            //name: 'mustBeString(value) && value.length > 10',
+            age: 'mustBeNumber(value.age) && value.age > 0',
+            _other: false
+        }
+    }
+};
+
 module.exports = {
     del: del,
     insert: insert,
@@ -188,8 +210,10 @@ function insert(object) {
         return insertObject;
     }).then(function (insertObject) {
         // Encode Indexes
-        if (object.indexes) {
-            insertObject.set = _encodeIndexSet(object.indexes, insertObject.set);
+        var indexes = _hasIndexes(rules, object.table);
+        
+        if (indexes) {
+            insertObject.set = _encodeIndexSet(indexes, insertObject.set);
         }
 
         return insertObject;
@@ -213,6 +237,15 @@ function insert(object) {
             throw err;
         }
     });
+}
+
+// # Has Indexes
+function _hasIndexes(rules, table){
+    if(rules[table] && rules[table].indexes){
+        return rules[table].indexes;
+    }
+    
+    return false;
 }
 
 // # Item Operation
@@ -307,12 +340,14 @@ function query(object) {
         return queryObject;
     }).then(function (queryObject) {
         // Define Indexes
+        var indexes = _hasIndexes(rules, object.table);
+        
         if (object.indexedBy === 'priority') {
             // Set indexed by
             queryObject.indexedBy = 'priorityIndex';
-        } else if (object.indexedBy && object.indexes) {
+        } else if (object.indexedBy && indexes) {
             // Discover and get Index
-            var index = _discoverIndex(object.indexes, object.indexedBy);
+            var index = _discoverIndex(indexes, object.indexedBy);
 
             // Set indexed by
             queryObject.indexedBy = index.name;
@@ -441,7 +476,7 @@ function update(object) {
     return Promise.try(function () {
         // Validations
         securityModel.hasKey(object);
-        securityModel.canWrite(object);
+        securityModel.canWrite(rules, object);
 
     }).then(function () {
         // Define update object
@@ -454,8 +489,10 @@ function update(object) {
         };
     }).then(function (updateObject) {
         // Encode Indexes
-        if (object.indexes) {
-            updateObject.set = _encodeIndexSet(object.indexes, object.set);
+        var indexes = _hasIndexes(rules, object.table);
+        
+        if (indexes) {
+            updateObject.set = _encodeIndexSet(indexes, object.set);
         }
 
         return updateObject;

@@ -38,19 +38,19 @@ function canWrite(rules, object) {
     var context = vm.createContext(_getContext(object));
 
     return Promise.try(function () {
-        // # Schema (solve async, compile async functions and replace with static result)
+        // # Schema (solve async tasks, compile  n' execute async functions and replace with static values)
         if (schema) {
             //
             var tasks = [];
 
-            // Seek for async functions [attr]
+            // Seek for async functions like "attr"
             _.each(schema, function (rule, key) {
                 var asyncFns = rule.match(/(attr)\(["'].*["']\)/g);
 
                 if (asyncFns) {
-                    // Iterate over all "mustExists" in this rule
+                    // Iterate over all functions in this rule
                     asyncFns.forEach(function (asyncFn) {
-                        // Push tasks in an array to be monitored via Promise.all
+                        // Push them to tasks in an array to be monitored via Promise.all
                         tasks.push(vm.runInContext(asyncFn, context).then(function (response) {
                             // Replace schema rule with static value
                             schema[key] = rule.replace(asyncFn, response);
@@ -62,7 +62,7 @@ function canWrite(rules, object) {
             return Promise.all(tasks);
         }
     }).then(function () {
-        // Create Result Stack
+        // Create result Stack
         return {
             acl: true,
             outOfKeys: [],
@@ -76,7 +76,7 @@ function canWrite(rules, object) {
 
         return resultStack;
     }).then(function (resultStack) {
-        // # Schema (solve keys)
+        // # Schema (resolve keys)
         if (schema) {
             var acceptOther = _.isBoolean(schema._other) ? schema._other : true;
 
@@ -93,7 +93,7 @@ function canWrite(rules, object) {
 
         return resultStack;
     }).then(function (resultStack) {
-        // # Schema (solve sync rules)
+        // # Schema (resolve sync rules)
         if (schema) {
             // Iterate over schema rules and test them
             _.each(schema, function (rule, key) {

@@ -1,7 +1,7 @@
 // # Base Model
 var _ = require('lodash');
 var Promise = require('bluebird');
-var cuid = new require('cuid');
+var cuid = require('cuid');
 var dynamodb = require('../libs').dynamodb;
 
 _createTables();

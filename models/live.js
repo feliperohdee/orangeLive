@@ -4,7 +4,7 @@ var Promise = require('bluebird');
 var base = require('./base');
 var broadcastModel = require('./broadcast');
 var securityModel = require('./security');
-var cuid = new require('cuid');
+var cuid = require('cuid');
 
 // Dynamoc Load
 var rules = {

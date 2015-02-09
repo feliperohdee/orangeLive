@@ -1,6 +1,6 @@
 // AWS Dynamodb => Schema
 var _ = require('lodash');
-var cuid = new require('cuid');
+var cuid = require('cuid');
 var helpers = require('./helpers');
 var schemaCollection = {};
 

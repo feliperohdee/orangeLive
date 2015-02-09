@@ -73,11 +73,11 @@ orangeLive.prototype.helpers = function () {
             while (path.length > 0) {
                 var shift = path.shift();
 
+                // Important test undefined, because 0 might be false
                 if (_.isUndefined(obj[shift])) {
                     return null;
                 }
 
-                // Important test undefined, because 0 might be false
                 obj = obj[shift];
             }
         } else {
@@ -91,7 +91,7 @@ orangeLive.prototype.helpers = function () {
 
         return obj;
     }
-    
+
     // # Param
     function param(obj) {
         var prefix;
@@ -118,7 +118,7 @@ orangeLive.prototype.helpers = function () {
         // Return the resulting serialization
         return result.join("&").replace(/%20/g, "+");
     }
-    
+
     // # Params Builder
     function paramsBuilder(prefix, obj, add) {
         var name;

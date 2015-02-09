@@ -59,6 +59,7 @@ function add() {
     instance.save({
         key: 'rohde1',
         name: 'Rohde Test',
+        subscribed: true,
         height: getRandomInt(10, 90),
         age: getRandomInt(105, 110),
         address: '',

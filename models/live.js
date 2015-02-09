@@ -21,7 +21,7 @@ var rules = {
         },
         // # Schema
         schema: {
-            name: 'mustExists("users/rohde1") && mustBeNumber(value.age)',
+            name: 'mustBeBoolean(attr("users/rohde1/subscribed")) && mustBeNumber(value.age)',
             //age: 'mustBeNumber(value.age) && value.age > 10',
             //_other: false
         }
@@ -37,70 +37,6 @@ module.exports = {
 };
 
 /*----------------------------*/
-
-// # Build Alias
-function _buildAlias(names, values) {
-    //
-    var result = {
-        data: {},
-        map: {}
-    };
-
-    if (!names) {
-        return false;
-    }
-
-    // Names
-    result.data.names = {};
-    result.map.names = [];
-
-    if (!_.isArray(names)) {
-        names = [names];
-    }
-
-    // Iterate over names
-    _.each(names, function (name, nameIndex) {
-        // Split paths from name
-        name = name.split('.');
-
-        // Iterate over name do handle path's
-        _.each(name, function (value, pathIndex) {
-            var id = cuid();
-            // Set data.name
-            result.data.names[id] = value.trim();
-
-            // Set map.name
-            if (pathIndex <= 0) {
-                // Path is root, just push name
-                result.map.names.push('#' + id);
-            } else {
-                // It means there is path, then extend map.names[index] with this path
-                result.map.names[nameIndex] += '.#' + id;
-            }
-        });
-    });
-
-    // Valus
-    if (values) {
-        //
-        result.data.values = {};
-        result.map.values = [];
-
-        if (!_.isArray(values)) {
-            values = [values];
-        }
-
-        _.each(values, function (value) {
-            var id = cuid();
-            // Set value
-            result.data.values[id] = value;
-            // Add on map
-            result.map.values.push(':' + id);
-        });
-    }
-
-    return result;
-}
 
 // # Del Operation
 function del(object) {
@@ -124,7 +60,7 @@ function del(object) {
                 [object.account, object.table].join('/'), // Collection channel
                 [object.account, object.table, object.key].join('/') // Item channel
             ],
-            data: _normalizeReponseData(delObject.where),
+            data: base.normalizeReponseData(delObject.where),
             operation: 'del'
         });
 
@@ -136,58 +72,6 @@ function del(object) {
             throw err;
         }
     });
-}
-
-// # Discover Index
-function _discoverIndex(indexes, index) {
-    //
-    var result = false;
-
-    // Discover Index
-    var string = indexes.string.indexOf(index);
-    var number = indexes.number.indexOf(index);
-
-    if (string >= 0) {
-        result = {
-            name: 'stringIndex' + string, // stringIndex0 or stringIndex1
-            attribute: '_si' + string // _si0 or _si1
-        };
-    }
-
-    if (number >= 0) {
-        result = {
-            name: 'numberIndex' + number, // numberIndex0 or numberIndex1
-            attribute: '_ni' + number // _ni0 or _ni1
-        };
-    }
-
-    return result;
-}
-
-// # Encode Index Set
-function _encodeIndexSet(indexes, set) {
-    var result = {};
-
-    // String Index
-    if (indexes.string) {
-        _.each(indexes.string, function (attribute, key) {
-            if (set[attribute]) { // if set attribute exists
-                result['_si' + (key % 2)] = set[attribute]; // key % 2 guarantees 0 or 1
-            }
-        });
-    }
-
-    // Number Index
-    if (indexes.number) {
-        _.each(indexes.number, function (attribute, key) {
-            if (set[attribute]) { // if set attribute exists
-                result['_ni' + (key % 2)] = set[attribute]; // key % 2 guarantees 0 or 1
-            }
-        });
-    }
-
-    // Match indexes results
-    return _.extend(set, result);
 }
 
 // # Insert Operation
@@ -212,10 +96,10 @@ function insert(object) {
         return insertObject;
     }).then(function (insertObject) {
         // Encode Indexes
-        var indexes = _hasIndexes(rules, object.table);
+        var indexes = base.hasIndexes(rules, object.table);
 
         if (indexes) {
-            insertObject.set = _encodeIndexSet(indexes, insertObject.set);
+            insertObject.set = base.encodeIndexSet(indexes, insertObject.set);
         }
 
         return insertObject;
@@ -226,7 +110,7 @@ function insert(object) {
                 [object.account, object.table].join('/'), // Collection channel
                 [object.account, object.table, object.key].join('/') // Item channel
             ],
-            data: _normalizeReponseData(insertObject.set),
+            data: base.normalizeReponseData(insertObject.set),
             operation: 'insert'
         });
 
@@ -239,15 +123,6 @@ function insert(object) {
             throw err;
         }
     });
-}
-
-// # Has Indexes
-function _hasIndexes(rules, table) {
-    if (rules[table] && rules[table].indexes) {
-        return rules[table].indexes;
-    }
-
-    return false;
 }
 
 // # Item Operation
@@ -272,7 +147,7 @@ function item(object) {
             var selectArray = object.select.split(',').concat('_key');
 
             // Build Alias
-            var alias = _buildAlias(selectArray);
+            var alias = base.buildAlias(selectArray);
 
             itemObject.alias = alias.data;
             itemObject.select = alias.map.names.join();
@@ -283,7 +158,7 @@ function item(object) {
         // Fetch item
         try {
             return base.item(itemObject).then(function (response) {
-                response.data = _normalizeReponseData(response.data);
+                response.data = base.normalizeReponseData(response.data);
 
                 return response;
             });
@@ -291,35 +166,6 @@ function item(object) {
             throw err;
         }
     });
-}
-
-// # Normalize Response Data
-// - Replace _key for key
-// - Replace _pi for priority
-// - Remove useless data for user
-function _normalizeReponseData(data) {
-    // New reference is required to never influence in another operation
-    var _data = _.clone(data);
-
-    if (_data._key) {
-        // Replace _key for key
-        _data.key = data._key;
-    }
-
-    if (_.isNumber(_data._pi)) {
-        // Replace _pi for priority
-        _data.priority = data._pi;
-    }
-
-    delete _data._key;
-    delete _data._namespace;
-    delete _data._pi; // Priority index
-    delete _data._si0; // String index 0
-    delete _data._si1; // String index 1
-    delete _data._ni0; // Number index 0
-    delete _data._ni1; // Number index 1
-
-    return _data;
 }
 
 // # Query Operation
@@ -344,14 +190,14 @@ function query(object) {
         return queryObject;
     }).then(function (queryObject) {
         // Define Indexes
-        var indexes = _hasIndexes(rules, object.table);
+        var indexes = base.hasIndexes(rules, object.table);
 
         if (object.indexedBy === 'priority') {
             // Set indexed by
             queryObject.indexedBy = 'priorityIndex';
         } else if (object.indexedBy && indexes) {
             // Discover and get Index
-            var index = _discoverIndex(indexes, object.indexedBy);
+            var index = base.discoverIndex(indexes, object.indexedBy);
 
             // Set indexed by
             queryObject.indexedBy = index.name;
@@ -376,7 +222,7 @@ function query(object) {
                 var selectArray = object.select.split(',').concat('_key');
 
                 // Build Alias
-                var alias = _buildAlias(selectArray);
+                var alias = base.buildAlias(selectArray);
 
                 queryObject.alias = alias.data;
                 queryObject.select = alias.map.names.join();
@@ -393,7 +239,7 @@ function query(object) {
 
             _.each(object.filters, function (filter, index) {
                 //
-                var alias = _buildAlias(filter.attribute, filter.value);
+                var alias = base.buildAlias(filter.attribute, filter.value);
 
                 if (!alias) {
                     throw new Error('Invalid attribute or value.');
@@ -463,7 +309,7 @@ function query(object) {
             return base.query(queryObject).then(function (response) {
                 if (response) {
                     response.data = _.map(response.data, function (data) {
-                        return _normalizeReponseData(data);
+                        return base.normalizeReponseData(data);
                     });
 
                     return response;
@@ -496,10 +342,10 @@ function update(object) {
         };
     }).then(function (updateObject) {
         // Encode Indexes
-        var indexes = _hasIndexes(rules, object.table);
+        var indexes = base.hasIndexes(rules, object.table);
 
         if (indexes) {
-            updateObject.set = _encodeIndexSet(indexes, object.set);
+            updateObject.set = base.encodeIndexSet(indexes, object.set);
         }
 
         return updateObject;
@@ -520,7 +366,7 @@ function update(object) {
             switch (object.special) {
                 case 'atomic':
                     // Build Alias
-                    alias = _buildAlias(_.keys(updateObject.set), _.uniq(_.values(updateObject.set)));
+                    alias = base.buildAlias(_.keys(updateObject.set), _.uniq(_.values(updateObject.set)));
 
                     if (!alias) {
                         throw new Error('Invalid attribute or value.');
@@ -536,7 +382,7 @@ function update(object) {
                     break;
                 case 'push':
                     // Build Alias
-                    alias = _buildAlias(_.keys(updateObject.set), _.uniq([_.values(updateObject.set)])); // <= Array notation is required
+                    alias = base.buildAlias(_.keys(updateObject.set), _.uniq([_.values(updateObject.set)])); // <= Array notation is required
 
                     if (!alias) {
                         throw new Error('Invalid attribute or value.');
@@ -552,7 +398,7 @@ function update(object) {
                     break;
                 case 'removeAttr':
                     // Build Alias
-                    alias = _buildAlias(_.keys(updateObject.set));
+                    alias = base.buildAlias(_.keys(updateObject.set));
 
                     if (!alias) {
                         throw new Error('Invalid attribute.');
@@ -584,7 +430,7 @@ function update(object) {
                 [object.account, object.table].join('/'), // Collection channel
                 [object.account, object.table, object.key].join('/') // Item channel
             ],
-            data: _normalizeReponseData(data),
+            data: base.normalizeReponseData(data),
             operation: operation
         });
 

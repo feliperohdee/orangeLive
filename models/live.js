@@ -12,7 +12,7 @@ var rules = {
         // # Access Control List
         acl: {
             _write: 'auth.id',
-            _read: 'value.id === auth.id'
+            _read: 'value.userId === auth.userId'
         },
         // # Indexes
         indexes: {
@@ -21,9 +21,9 @@ var rules = {
         },
         // # Schema
         schema: {
-            //name: 'mustBeString(value) && value.length > 10',
-            age: 'mustBeNumber(value.age) && value.age > 0',
-            _other: false
+            name: 'mustExists("users/rohde1") && mustBeNumber(value.age)',
+            //age: 'mustBeNumber(value.age) && value.age > 10',
+            //_other: false
         }
     }
 };
@@ -106,7 +106,9 @@ function _buildAlias(names, values) {
 function del(object) {
     return Promise.try(function () {
         // Validations 
-        securityModel.hasKey(object);
+        if (!object.key) {
+            throw new errors.missingKeyError();
+        }
     }).then(function () {
         // Define del object
         return {
@@ -192,7 +194,7 @@ function _encodeIndexSet(indexes, set) {
 function insert(object) {
     return Promise.try(function () {
         // Validations
-        securityModel.canWrite(object);
+        //securityModel.canWrite(object);
     }).then(function () {
         // Build Insert object
         return {
@@ -211,7 +213,7 @@ function insert(object) {
     }).then(function (insertObject) {
         // Encode Indexes
         var indexes = _hasIndexes(rules, object.table);
-        
+
         if (indexes) {
             insertObject.set = _encodeIndexSet(indexes, insertObject.set);
         }
@@ -240,11 +242,11 @@ function insert(object) {
 }
 
 // # Has Indexes
-function _hasIndexes(rules, table){
-    if(rules[table] && rules[table].indexes){
+function _hasIndexes(rules, table) {
+    if (rules[table] && rules[table].indexes) {
         return rules[table].indexes;
     }
-    
+
     return false;
 }
 
@@ -252,7 +254,9 @@ function _hasIndexes(rules, table){
 function item(object) {
     return Promise.try(function () {
         // Validations
-        securityModel.hasKey(object);
+        if (!object.key) {
+            throw new errors.missingKeyError();
+        }
     }).then(function () {
         // Define item object
         return {
@@ -341,7 +345,7 @@ function query(object) {
     }).then(function (queryObject) {
         // Define Indexes
         var indexes = _hasIndexes(rules, object.table);
-        
+
         if (object.indexedBy === 'priority') {
             // Set indexed by
             queryObject.indexedBy = 'priorityIndex';
@@ -475,9 +479,12 @@ function query(object) {
 function update(object) {
     return Promise.try(function () {
         // Validations
-        securityModel.hasKey(object);
-        securityModel.canWrite(rules, object);
-
+        if (!object.key) {
+            throw new errors.missingKeyError();
+        }
+    }).then(function(){
+        // Security
+        return securityModel.canWrite(rules, object);
     }).then(function () {
         // Define update object
         return {
@@ -490,7 +497,7 @@ function update(object) {
     }).then(function (updateObject) {
         // Encode Indexes
         var indexes = _hasIndexes(rules, object.table);
-        
+
         if (indexes) {
             updateObject.set = _encodeIndexSet(indexes, object.set);
         }

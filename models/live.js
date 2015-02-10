@@ -11,7 +11,8 @@ var rules = {
     users: {
         // # Access Control List
         acl: {
-            _write: 'auth.id',
+            _save: 'auth.id',
+            _remove: true,
             _read: 'value.userId === auth.userId'
         },
         // # Indexes
@@ -21,9 +22,9 @@ var rules = {
         },
         // # Schema
         schema: {
-            name: 'mustBeBoolean(attr("users/rohde1/subscribed")) && mustBeNumber(value.age)',
-            //age: 'mustBeNumber(value.age) && value.age > 10',
-            //_other: false
+            name: 'mustBeBoolean(attr("users/rohde1/subscribed")) && mustBeString(value.name)',
+            age: 'mustBeNumber(value.age) && value.age > 0',
+            _other: true
         }
     }
 };

@@ -45,17 +45,20 @@ function canWrite(rules, object) {
 
             // Seek for async functions like "attr"
             _.each(schema, function (rule, key) {
-                var asyncFns = rule.match(/(attr)\(["'].*["']\)/g);
+                if (key !== '_other') {
+                    //
+                    var asyncFns = rule.match(/(attr)\(["'].*["']\)/g);
 
-                if (asyncFns) {
-                    // Iterate over all functions in this rule
-                    asyncFns.forEach(function (asyncFn) {
-                        // Push them to tasks in an array to be monitored via Promise.all
-                        tasks.push(vm.runInContext(asyncFn, context).then(function (response) {
-                            // Replace schema rule with static value
-                            schema[key] = rule.replace(asyncFn, response);
-                        }));
-                    });
+                    if (asyncFns) {
+                        // Iterate over all functions in this rule
+                        asyncFns.forEach(function (asyncFn) {
+                            // Push them to tasks in an array to be monitored via Promise.all
+                            tasks.push(vm.runInContext(asyncFn, context).then(function (response) {
+                                // Replace schema rule with static value
+                                schema[key] = rule.replace(asyncFn, response);
+                            }));
+                        });
+                    }
                 }
             });
 
@@ -71,38 +74,31 @@ function canWrite(rules, object) {
     }).then(function (resultStack) {
         // # ACL's
         if (acl) {
-            resultStack.acl = !vm.runInContext(acl._write, context);
+            resultStack.acl = !vm.runInContext(acl._save, context);
         }
 
         return resultStack;
     }).then(function (resultStack) {
-        // # Schema (resolve keys)
+        // # Schema (resolve keys and sync rules)
         if (schema) {
             var acceptOther = _.isBoolean(schema._other) ? schema._other : true;
 
-            // Test schema keys
-            if (!acceptOther) {
-                // Iterate over value keys and test if it exists in schema keys
-                _.each(_.keys(context.value), function (key) {
-                    if (key !== '_other' && !schema[key]) {
+            // Iterate over value keys
+            _.each(_.keys(context.value), function (key) {
+                if (key !== '_other') {
+                    // if not accept others, test if exists in schema keys
+                    if (!acceptOther && !schema[key]) {
                         resultStack.outOfKeys.push(key);
                     }
-                });
-            }
-        }
 
-        return resultStack;
-    }).then(function (resultStack) {
-        // # Schema (resolve sync rules)
-        if (schema) {
-            // Iterate over schema rules and test them
-            _.each(schema, function (rule, key) {
-                if (key !== '_other' && !vm.runInContext(rule, context)) {
-                    resultStack.outOfRules.push(key);
+                    // Test rules
+                    if (schema[key] && !vm.runInContext(schema[key], context)) {
+                        resultStack.outOfRules.push(key);
+                    }
                 }
             });
         }
-
+        
         return resultStack;
     }).then(function (resultStack) {
         if (resultStack.acl) {
@@ -140,7 +136,7 @@ function _getContext(object) {
             return _.isBoolean(testedValue);
         },
         // # Schema Validator :equals
-        mustBeEquals: function(testedValue, value){
+        mustBeEquals: function (testedValue, value) {
             return testedValue === value;
         },
         // # Schema Validator :number
@@ -152,15 +148,15 @@ function _getContext(object) {
             return _.isString(testedValue);
         },
         // # Schema Validator :contains
-        mustContains: function(value, testedValue){
+        mustContains: function (value, testedValue) {
             return _.contains(value, testedValue);
         },
         // # Schema Validator :exists
         mustExists: function (testedValue) {
-            if(_.isObject(testedValue) || _.isArray(testedValue)){
+            if (_.isObject(testedValue) || _.isArray(testedValue)) {
                 return !_.isEmpty(testedValue);
             }
-            
+
             return !_.isUndefined(testedValue) && !_.isNull(testedValue);
         },
         // # Schema Validator :now
@@ -189,7 +185,7 @@ function _getAttr(testedValue, object) {
         if (!object.table) {
             throw new errors.missingTableError();
         }
-        
+
         if (!object.key) {
             throw new errors.missingKeyError();
         }
@@ -221,9 +217,9 @@ function _getAttr(testedValue, object) {
             return base.item(itemObject).then(function (response) {
                 //
                 response = base.getObjectValue(response.data, object.select);
-                
+
                 // Wrap string with comma
-                if(_.isString(response)){
+                if (_.isString(response)) {
                     response = '\'' + response + '\'';
                 }
 

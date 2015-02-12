@@ -1,5 +1,7 @@
 // # App
-var instance = new orangeLive('dlBSd$ib89$Be2/users').on('load', function (data, count, pagination) {
+var orangeLive = new OrangeLive();
+
+var instance = orangeLive.instance('dlBSd$ib89$Be2/users').on('load', function (data, count, pagination) {
     //console.log('instance 1', data);
     //console.log('instance 1 count', count);
 
@@ -72,7 +74,7 @@ function add() {
     });
 }
 
-var instance2 = new orangeLive('dlBSd$ib89$Be2/users/rohde1').on('load', function (data) {
+var instance2 = orangeLive.instance('dlBSd$ib89$Be2/users/rohde1').on('load', function (data) {
     //console.log('instance 2', data.value());
 
     setTimeout(function () {
@@ -113,7 +115,7 @@ function pushList() {
     instance2.pushList('array', 'pqna');
 }
 
-var instance3 = new orangeLive('dlBSd$ib89$Be2/users/rohde5').on('load', function (data) {
+var instance3 = orangeLive.instance('dlBSd$ib89$Be2/users/rohde5').on('load', function (data) {
     //console.log('instance 3', data);
 }).on('save', function (data) {
     console.log('instance 3 On save Event', data);

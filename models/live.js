@@ -11,9 +11,9 @@ var rules = {
     users: {
         // # Access Control List
         acl: {
-            _save: 'auth.id',
-            _remove: true,
-            _read: 'value.userId === auth.userId'
+            _save: 'auth.userId === 10',
+            _remove: 'auth.id',
+            _read: 'value.age > 0'
         },
         // # Indexes
         indexes: {
@@ -22,8 +22,8 @@ var rules = {
         },
         // # Schema
         schema: {
-            name: 'mustBeBoolean(attr("users/rohde1/subscribed")) && mustBeString(value.name)',
-            age: 'mustBeNumber(value.age) && value.age > 0',
+            name: 'must("beBoolean", attr("users/rohde1/subscribed")) && must("beString", value.name)',
+            age: 'must("beNumber", value.age) && value.age > 0',
             _other: true
         }
     }
@@ -307,17 +307,29 @@ function query(object) {
     }).then(function (queryObject) {
         // Fetch query 
         try {
-            return base.query(queryObject).then(function (response) {
-                if (response) {
-                    response.data = _.map(response.data, function (data) {
-                        return base.normalizeReponseData(data);
-                    });
-
-                    return response;
-                }
-            });
+            return base.query(queryObject);
         } catch (err) {
             throw err;
+        }
+    }).then(function (response) {
+        // Security
+        if (response) {
+            return securityModel.canRead(rules, {
+                account: object.account,
+                table: object.table,
+                data: response.data
+            }, true).then(function () {
+                return response;
+            });
+        }
+    }).then(function (response) {
+        // Normalize Response
+        if (response) {
+            response.data = _.map(response.data, function (data) {
+                return base.normalizeReponseData(data);
+            });
+
+            return response;
         }
     });
 }
@@ -329,9 +341,13 @@ function update(object) {
         if (!object.key) {
             throw new errors.missingKeyError();
         }
-    }).then(function(){
+    }).then(function () {
         // Security
-        return securityModel.canWrite(rules, object);
+        return securityModel.canWrite(rules, {
+            account: object.account,
+            table: object.table,
+            data: object.set
+        });
     }).then(function () {
         // Define update object
         return {

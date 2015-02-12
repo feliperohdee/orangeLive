@@ -6,48 +6,30 @@ var errors = require('errors');
 var vm = require('vm');
 
 module.exports = {
-    //canRead: canRead,
+    canRead: canRead,
     canWrite: canWrite
 };
 
 /*----------------------------*/
 
-// # Can Read
-/*
- function canRead(rules, object) {
- var can = false;
- 
- // Try get from table first
- if (rules[object.table].acl) {
- can = rules[object.table].acl._read;
- } else {
- can = rules.acl._read;
- }
- 
- if (!can) {
- throw new errors.securityError();
- }
- }
- */
-
 // # Can Write
-function canWrite(rules, object) {
+function canWrite(rules, params) {
     //
-    var acl = rules[object.table] ? rules[object.table].acl || rules.acl : false;
-    var schema = rules[object.table] ? _.clone(rules[object.table].schema) : false;
-    var context = vm.createContext(_getContext(object));
+    var acl = rules[params.table] ? rules[params.table].acl || rules.acl : false;
+    var schema = rules[params.table] ? _.clone(rules[params.table].schema) : false;
+    var context = vm.createContext(_getContext(params));
 
     return Promise.try(function () {
-        // # Schema (solve async tasks, compile  n' execute async functions and replace with static values)
+        // # Schema (resolve async tasks, compile  n' execute async functions and replace with static values)
         if (schema) {
             //
             var tasks = [];
 
             // Seek for async functions like "attr"
-            _.each(schema, function (rule, key) {
-                if (key !== '_other') {
+            _.keys(context.value).forEach(function (key) {
+                if (schema[key] && key !== '_other') {
                     //
-                    var asyncFns = rule.match(/(attr)\(["'].*["']\)/g);
+                    var asyncFns = schema[key].match(/(attr)\(["'].*["']\)/g);
 
                     if (asyncFns) {
                         // Iterate over all functions in this rule
@@ -55,7 +37,7 @@ function canWrite(rules, object) {
                             // Push them to tasks in an array to be monitored via Promise.all
                             tasks.push(vm.runInContext(asyncFn, context).then(function (response) {
                                 // Replace schema rule with static value
-                                schema[key] = rule.replace(asyncFn, response);
+                                schema[key] = schema[key].replace(asyncFn, response);
                             }));
                         });
                     }
@@ -73,7 +55,7 @@ function canWrite(rules, object) {
         };
     }).then(function (resultStack) {
         // # ACL's
-        if (acl) {
+        if (acl._save) {
             resultStack.acl = !vm.runInContext(acl._save, context);
         }
 
@@ -84,7 +66,7 @@ function canWrite(rules, object) {
             var acceptOther = _.isBoolean(schema._other) ? schema._other : true;
 
             // Iterate over value keys
-            _.each(_.keys(context.value), function (key) {
+            _.keys(context.value).forEach(function (key) {
                 if (key !== '_other') {
                     // if not accept others, test if exists in schema keys
                     if (!acceptOther && !schema[key]) {
@@ -98,7 +80,7 @@ function canWrite(rules, object) {
                 }
             });
         }
-        
+
         return resultStack;
     }).then(function (resultStack) {
         if (resultStack.acl) {
@@ -120,91 +102,134 @@ function canWrite(rules, object) {
     });
 }
 
+// # Can Read
+function canRead(rules, params, isCollection) {
+    var acl = rules[params.table] ? rules[params.table].acl || rules.acl : false;
+    var context = vm.createContext(_getContext(params));
+
+    return Promise.try(function () {
+        // Create result Stack
+        return {
+            acl: true
+        };
+    }).then(function (resultStack) {
+        // # ACL's
+        if (acl._read) {
+            if (isCollection) {
+                // Create script to run multiple times
+                var script = new vm.Script(acl._read);
+
+                resultStack.acl = !_.every(params.data, function (data) {
+                    // Update context data
+                    context.value = data;
+
+                    return script.runInContext(context);
+                });
+            }else{
+                resultStack.acl = !vm.runInContext(acl._read, context);
+            }
+        }
+        
+        return resultStack;
+    }).then(function (resultStack) {
+        if (resultStack.acl) {
+            // ACL Error
+            throw new errors.securityError();
+        }
+        
+        return true;
+    });
+}
+
 // # Get context to validator's VM
-function _getContext(object) {
+function _getContext(params) {
     return {
         // # Attr {alias for getAttr}
-        attr: function (testedValue) {
-            return _getAttr(testedValue, object);
+        attr: function (attr) {
+            return _getAttr(attr, params);
         },
         // # Auth
         auth: {
+            userId: 10,
             id: 9
         },
-        // # Schema Validator :boolean
-        mustBeBoolean: function (testedValue) {
-            return _.isBoolean(testedValue);
-        },
-        // # Schema Validator :equals
-        mustBeEquals: function (testedValue, value) {
-            return testedValue === value;
-        },
-        // # Schema Validator :number
-        mustBeNumber: function (testedValue) {
-            return _.isNumber(testedValue);
-        },
-        // # Schema Validator :string
-        mustBeString: function (testedValue) {
-            return _.isString(testedValue);
-        },
-        // # Schema Validator :contains
-        mustContains: function (value, testedValue) {
-            return _.contains(value, testedValue);
-        },
-        // # Schema Validator :exists
-        mustExists: function (testedValue) {
-            if (_.isObject(testedValue) || _.isArray(testedValue)) {
-                return !_.isEmpty(testedValue);
-            }
+        // # // # Schema Validator
+        must: function (testCase, testedValue, value) {
+            // Describe test cases
+            var testCases = {
+                beBoolean: function (testedValue) {
+                    return _.isBoolean(testedValue);
+                },
+                beEquals: function (testedValue) {
+                    return testedValue === value;
+                },
+                beNumber: function (testedValue) {
+                    return _.isNumber(testedValue);
+                },
+                beString: function (testedValue) {
+                    return _.isString(testedValue);
+                },
+                contains: function (testedValue) {
+                    return _.contains(value, testedValue);
+                },
+                exists: function (testedValue) {
+                    if (_.isObject(testedValue) || _.isArray(testedValue)) {
+                        return !_.isEmpty(testedValue);
+                    }
 
-            return !_.isUndefined(testedValue) && !_.isNull(testedValue);
+                    return !_.isUndefined(testedValue) && !_.isNull(testedValue);
+                }
+            };
+
+            // Execute test cases
+            return testCases[testCase](testedValue, value);
         },
         // # Schema Validator :now
         now: function () {
             return +new Date;
         },
-        // # Value {set when post, data when fetch}
-        value: object.set || object.data || {}
+        // # Value
+        value: params.data || {}
     };
 }
 
 // # Get Attr Logic
-function _getAttr(testedValue, object) {
-    // Split test value to override object
-    testedValue = testedValue.split('/');
+function _getAttr(attr, params) {
+    // Split attr to append into params
+    attr = attr.split('/');
 
-    object = {
-        account: object.account,
-        table: testedValue[0],
-        key: testedValue[1],
-        select: testedValue[2] || false
-    };
+    // Extend params with attr splitted
+    _.extend(params, {
+        table: attr[0],
+        key: attr[1],
+        select: attr[2] || false
+    });
 
     return Promise.try(function () {
         // Validations
-        if (!object.table) {
+        if (!params.table) {
             throw new errors.missingTableError();
         }
 
-        if (!object.key) {
+        if (!params.key) {
             throw new errors.missingKeyError();
         }
     }).then(function () {
         // Define item object
         return {
             where: {
-                _namespace: [object.account, object.table].join('/'),
-                _key: object.key
+                _namespace: [params.account, params.table].join('/'),
+                _key: params.key
             }
         };
     }).then(function (itemObject) {
         // Define Select
-        if (!object.select) {
-            object.select = '_key';
+        if (!params.select) {
+            params.select = '_key';
         }
 
         // Split comma's, and build alias
-        var selectArray = object.select.split(',');
+        var selectArray = params.select.split(',');
         var alias = base.buildAlias(selectArray);
 
         itemObject.alias = alias.data;
@@ -216,7 +241,7 @@ function _getAttr(testedValue, object) {
         try {
             return base.item(itemObject).then(function (response) {
                 //
-                response = base.getObjectValue(response.data, object.select);
+                response = base.getObjectValue(response.data, params.select);
 
                 // Wrap string with comma
                 if (_.isString(response)) {

@@ -15,31 +15,48 @@ module.exports = {
 
 // # Can Read
 function canRead(params, isCollection) {
-    var acl = params.rules.acl;
+    var aclRule = params.rules.acl && params.rules.acl._read ? params.rules.acl._read : false;
     var context = vm.createContext(_getContext(params));
-    var resultStack = {
+    var errorStack = {
         acl: true
     };
 
     return Promise.try(function () {
         // # Validate ACL's
-        if (acl._read) {
-            if (isCollection) {
-                // Create script to run multiple times
-                var script = new vm.Script(acl._read);
+        if (aclRule) {
+            // Define resolver function
+            var resolveAcl = function (rule) {
+                // Create script to run multiple times if needed
+                var script = new vm.Script(rule);
 
-                resultStack.acl = !_.every(params.data, function (data) {
-                    // Update context data
-                    context.data = data;
+                if (isCollection) {
+                    errorStack.acl = _.every(params.data, function (data) {
+                        // Update context data
+                        context.data = data;
 
-                    return script.runInContext(context);
-                });
+                        return !script.runInContext(context);
+                    });
+                } else {
+                    errorStack.acl = !script.runInContext(context);
+                }
+            };
+
+            // Test if is there async functions
+            var asyncFns = _isAsyncFns(aclRule);
+
+            if (!asyncFns) {
+                // If no async function, just resolve and keep processing
+                resolveAcl(aclRule);
             } else {
-                resultStack.acl = !vm.runInContext(acl._read, context);
+                // Otherwise, resolve asynchronous functions first
+                return _resolveAsyncFns(asyncFns, aclRule, context).then(function (staticRule) {
+                    // After done resolve 
+                    resolveAcl(staticRule);
+                });
             }
         }
     }).then(function () {
-        if (resultStack.acl) {
+        if (errorStack.acl) {
             // ACL Error
             throw new errors.securityError();
         }
@@ -51,10 +68,10 @@ function canRead(params, isCollection) {
 // # Can Write
 function canWrite(params) {
     //
-    var acl = params.rules.acl;
+    var aclRule = params.rules.acl && params.rules.acl._save ? params.rules.acl._save : false;
     var context = vm.createContext(_getContext(params));
-    var schema = _.clone(params.rules.schema);
-    var resultStack = {
+    var schema = params.rules.schema;
+    var errorStack = {
         acl: true,
         outOfKeys: [],
         outOfRules: []
@@ -62,8 +79,25 @@ function canWrite(params) {
 
     return Promise.try(function () {
         // # Validate ACL's
-        if (acl._save) {
-            resultStack.acl = !vm.runInContext(acl._save, context);
+        if (aclRule) {
+            // Define resolver function
+            var resolveAcl = function (rule) {
+                errorStack.acl = !vm.runInContext(rule, context);
+            };
+
+            // Test if is there async functions
+            var asyncFns = _isAsyncFns(aclRule);
+
+            if (!asyncFns) {
+                // If no async function, just resolve and keep processing
+                resolveAcl(aclRule);
+            } else {
+                // Otherwise, resolve asynchronous functions first
+                return _resolveAsyncFns(asyncFns, aclRule, context).then(function (staticRule) {
+                    // After done resolve 
+                    resolveAcl(staticRule);
+                });
+            }
         }
     }).then(function () {
         // # Validate Schema
@@ -71,35 +105,36 @@ function canWrite(params) {
             var acceptOther = _.isBoolean(schema._other) ? schema._other : true;
             var asyncTasks = [];
 
+            // Define resolver function
+            var resolveRule = function (key, rule) {
+                if (!vm.runInContext(rule, context)) {
+                    errorStack.outOfRules.push(key);
+                }
+            };
+
             // Iterate over data keys to seek for schema rules
             _.chain(context.data).keys().each(function (key) {
                 //
-                var rule = schema[key];
+                var schemaRule = schema[key];
 
                 // Test schema keys
-                if (!acceptOther && !rule) {
-                    resultStack.outOfKeys.push(key);
+                if (!acceptOther && !schemaRule) {
+                    errorStack.outOfKeys.push(key);
                 }
 
-                // test schema rules
-                if (rule) {
+                // Test schema rules
+                if (schemaRule) {
                     // Test if is there async functions
-                    var asyncFns = _isAsyncFns(rule);
-                    // Define resolver function
-                    var resolveRule = function (rule, context) {
-                        if (!vm.runInContext(rule, context)) {
-                            resultStack.outOfRules.push(key);
-                        }
-                    };
+                    var asyncFns = _isAsyncFns(schemaRule);
 
                     if (!asyncFns) {
                         // If no async function, just resolve and keep processing
-                        resolveRule(rule, context);
+                        resolveRule(key, schemaRule);
                     } else {
                         // Otherwise, create tasks to resolve asynchronous functions first
-                        asyncTasks.push(_resolveAsyncFns(rule, asyncFns, context).then(function (rule) {
+                        asyncTasks.push(_resolveAsyncFns(asyncFns, schemaRule, context).then(function (staticRule) {
                             // After done resolve 
-                            resolveRule(rule, context);
+                            resolveRule(key, staticRule);
                         }));
                     }
                 }
@@ -111,18 +146,18 @@ function canWrite(params) {
             }
         }
     }).then(function () {
-        if (resultStack.acl) {
+        if (errorStack.acl) {
             // ACL Error
             throw new errors.securityError();
-        } else if (resultStack.outOfKeys.length) {
+        } else if (errorStack.outOfKeys.length) {
             // Schema Keys Error
             throw new errors.schemaKeysError({
-                explanation: 'The provided keys "' + resultStack.outOfKeys.join(',') + '" is/are out of schema keys.'
+                explanation: 'The provided keys "' + errorStack.outOfKeys.join(',') + '" is/are out of schema keys.'
             });
-        } else if (resultStack.outOfRules.length) {
+        } else if (errorStack.outOfRules.length) {
             // Schema Rules Error
             throw new errors.schemaRulesError({
-                explanation: 'The provided values, which belongs to key(s) "' + resultStack.outOfRules.join(',') + '" is/are out of schema rules.'
+                explanation: 'The provided values, which belongs to key(s) "' + errorStack.outOfRules.join(',') + '" is/are out of schema rules.'
             });
         }
 
@@ -130,24 +165,49 @@ function canWrite(params) {
     });
 }
 
-// # Filter Clients {use for socket, no promises for agility}
+// # Filter Clients {use for socket}
 function filterClients(params) {
     //
+    var aclRule = params.rules.acl && params.rules.acl._read ? params.rules.acl._read : false;
     var context = vm.createContext(_getContext(params));
-    var script = new vm.Script(params.rules.acl._read);
     var clients = [];
 
-    _.each(params.clients, function (auth, id) {
-        // Update context auth
-        context.auth = auth;
+    return Promise.try(function () {
+        // # Validate ACL's
+        if (aclRule) {
+            // Define resolver function
+            var resolveAcl = function (rule) {
+                // Create script to run multiple times if needed
+                var script = new vm.Script(rule);
 
-        // Validate rule against value
-        if (script.runInContext(context)) {
-            clients.push(id);
+                _.each(params.clients, function (auth, id) {
+                    // Update context auth
+                    context.auth = auth;
+
+                    // Validate rule against value
+                    if (script.runInContext(context)) {
+                        clients.push(id);
+                    }
+                });
+            };
+
+            // Test if is there async functions
+            var asyncFns = _isAsyncFns(aclRule);
+
+            if (!asyncFns) {
+                // If no async function, just resolve and keep processing
+                resolveAcl(aclRule);
+            } else {
+                // Otherwise, resolve asynchronous functions first
+                return _resolveAsyncFns(asyncFns, aclRule, context).then(function (staticRule) {
+                    // After done resolve 
+                    resolveAcl(staticRule);
+                });
+            }
         }
+    }).then(function () {
+        return clients;
     });
-
-    return clients;
 }
 
 // # Get Attr Logic
@@ -262,11 +322,11 @@ function _getContext(params) {
 
 // # Seek for async functions
 function _isAsyncFns(rule) {
-    return rule.match(/(attr)\(["'][a-z0-9A-Z\/]*["']\)/g);
+    return rule.match(/attr\(['"][^\(\)]+['"]\)/g);
 }
 
 // # Resolve asynchronous function in a rule
-function _resolveAsyncFns(rule, fns, context) {
+function _resolveAsyncFns(fns, rule, context) {
     // Iterate over all async functions in this rule
     var tasks = _.map(fns, function (fn) {
         // Push them to tasks array to be monitored via Promise.all

@@ -104,11 +104,11 @@ function _dispatch(response) {
                 clients: clientsByChannel[channelId],
                 data: response.data,
                 rules: rules
-            }).forEach(function (id) {
+            }).each(function (id) {
                 try {
                     clients[id].send(JSON.stringify(response));
                 } catch (err) {
-                    console.log(err.message);
+                    console.error(err.message);
                 }
             });
         }

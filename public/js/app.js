@@ -115,6 +115,7 @@ function pushList() {
     instance2.pushList('array', 'pqna');
 }
 
+/*
 var instance3 = orangeLive.instance('dlBSd$ib89$Be2/users/rohde5').on('load', function (data) {
     //console.log('instance 3', data);
 }).on('save', function (data) {
@@ -133,6 +134,7 @@ function updateWithCondition() {
         }
     });
 }
+*/
 
 function getRandomInt(min, max) {
     return Math.floor(Math.random() * (max - min)) + min;

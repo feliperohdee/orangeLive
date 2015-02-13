@@ -3,8 +3,6 @@
     //
     'use strict';
     
-    var Instance = OrangeLive.prototype.Instance;
-    
     Instance.prototype.helpers = function () {
         //
         return{

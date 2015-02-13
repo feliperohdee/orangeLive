@@ -2,8 +2,6 @@
 (function () {
     //
     'use strict';
-    
-    var Instance = OrangeLive.prototype.Instance;
 
     Instance.prototype.collection = function () {
         //

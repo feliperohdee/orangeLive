@@ -3,31 +3,7 @@ var _ = require('lodash');
 var Promise = require('bluebird');
 var base = require('./base');
 var broadcastModel = require('./broadcast');
-var securityModel = require('./security');
 var cuid = require('cuid');
-
-// Dynamoc Load
-var rules = {
-    users: {
-        // # Access Control List
-        acl: {
-            _save: 'auth.userId === 10',
-            _remove: 'auth.id',
-            _read: 'value.age > 0'
-        },
-        // # Indexes
-        indexes: {
-            string: ['name'],
-            number: ['height', 'age']
-        },
-        // # Schema
-        schema: {
-            name: 'must("beBoolean", attr("users/rohde1/subscribed")) && must("beString", value.name)',
-            age: 'must("beNumber", value.age) && value.age > 0',
-            _other: true
-        }
-    }
-};
 
 module.exports = {
     del: del,
@@ -57,10 +33,11 @@ function del(object) {
     }).then(function (delObject) {
         // Broadcast Operation
         broadcastModel.publish({
-            sendTo: [
-                [object.account, object.table].join('/'), // Collection channel
-                [object.account, object.table, object.key].join('/') // Item channel
-            ],
+            to: {
+                account: object.account,
+                table: object.table,
+                key: object.key
+            },
             data: base.normalizeReponseData(delObject.where),
             operation: 'del'
         });
@@ -79,7 +56,7 @@ function del(object) {
 function insert(object) {
     return Promise.try(function () {
         // Validations
-        //securityModel.canWrite(object);
+        // Todo
     }).then(function () {
         // Build Insert object
         return {
@@ -97,20 +74,19 @@ function insert(object) {
         return insertObject;
     }).then(function (insertObject) {
         // Encode Indexes
-        var indexes = base.hasIndexes(rules, object.table);
-
-        if (indexes) {
-            insertObject.set = base.encodeIndexSet(indexes, insertObject.set);
+        if (object.indexes) {
+            insertObject.set = base.encodeIndexSet(object.indexes, insertObject.set);
         }
 
         return insertObject;
     }).then(function (insertObject) {
         // Broadcast Operation
         broadcastModel.publish({
-            sendTo: [
-                [object.account, object.table].join('/'), // Collection channel
-                [object.account, object.table, object.key].join('/') // Item channel
-            ],
+            to: {
+                account: object.account,
+                table: object.table,
+                key: object.key
+            },
             data: base.normalizeReponseData(insertObject.set),
             operation: 'insert'
         });
@@ -191,14 +167,12 @@ function query(object) {
         return queryObject;
     }).then(function (queryObject) {
         // Define Indexes
-        var indexes = base.hasIndexes(rules, object.table);
-
         if (object.indexedBy === 'priority') {
             // Set indexed by
             queryObject.indexedBy = 'priorityIndex';
-        } else if (object.indexedBy && indexes) {
+        } else if (object.indexedBy && object.indexes) {
             // Discover and get Index
-            var index = base.discoverIndex(indexes, object.indexedBy);
+            var index = base.discoverIndex(object.indexes, object.indexedBy);
 
             // Set indexed by
             queryObject.indexedBy = index.name;
@@ -312,17 +286,6 @@ function query(object) {
             throw err;
         }
     }).then(function (response) {
-        // Security
-        if (response) {
-            return securityModel.canRead(rules, {
-                account: object.account,
-                table: object.table,
-                data: response.data
-            }, true).then(function () {
-                return response;
-            });
-        }
-    }).then(function (response) {
         // Normalize Response
         if (response) {
             response.data = _.map(response.data, function (data) {
@@ -342,13 +305,6 @@ function update(object) {
             throw new errors.missingKeyError();
         }
     }).then(function () {
-        // Security
-        return securityModel.canWrite(rules, {
-            account: object.account,
-            table: object.table,
-            data: object.set
-        });
-    }).then(function () {
         // Define update object
         return {
             set: object.set,
@@ -359,10 +315,8 @@ function update(object) {
         };
     }).then(function (updateObject) {
         // Encode Indexes
-        var indexes = base.hasIndexes(rules, object.table);
-
-        if (indexes) {
-            updateObject.set = base.encodeIndexSet(indexes, object.set);
+        if (object.indexes) {
+            updateObject.set = base.encodeIndexSet(object.indexes, object.set);
         }
 
         return updateObject;
@@ -443,10 +397,11 @@ function update(object) {
         data.key = object.key;
 
         broadcastModel.publish({
-            sendTo: [
-                [object.account, object.table].join('/'), // Collection channel
-                [object.account, object.table, object.key].join('/') // Item channel
-            ],
+            to: {
+                account: object.account,
+                table: object.table,
+                key: object.key
+            },
             data: base.normalizeReponseData(data),
             operation: operation
         });

@@ -1,13 +1,17 @@
 //Main Route
 var express = require('express');
 var router = express.Router();
+var middleware = require('../middleware');
 var api = require('../api');
 
-router.delete('/:account/:table/:key', api.http(api.live.del));
-router.get('/:account/:table', api.http(api.live.query));
-router.get('/:account/:table/:key', api.http(api.live.item));
-router.get('/:account/:table/:key/:select', api.http(api.live.item));
-router.post('/:account/:table', api.http(api.live.insert));
-router.put('/:account/:table/:key', api.http(api.live.update));
+// Apply CORS n' Auth policies
+router.use(middleware.routes.enableCORS);
+
+router.delete('/:account/:table/:key', middleware.auth.api, api.http(api.live.del));
+router.get('/:account/:table', middleware.auth.api, api.http(api.live.query));
+router.get('/:account/:table/:key', middleware.auth.api, api.http(api.live.item));
+router.get('/:account/:table/:key/:select', middleware.auth.api, api.http(api.live.item));
+router.post('/:account/:table', middleware.auth.api, api.http(api.live.insert));
+router.put('/:account/:table/:key', middleware.auth.api, api.http(api.live.update));
 
 module.exports = router;

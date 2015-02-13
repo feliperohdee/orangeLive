@@ -1,10 +1,11 @@
 // # Broadcast Model
-var debug = require('debug')('broadcastModel');
 var _ = require('lodash');
 var Promise = require('bluebird');
 var redis = require('redis');
 var url = require('url');
 var msgpack = require('msgpack-js');
+var rulesModel = require('./rules');
+var securityModel = require('./security');
 
 // Create redis clients
 var redisPub = redis.createClient(6379, '127.0.0.1');
@@ -13,8 +14,9 @@ var redisSub = redis.createClient(6379, '127.0.0.1', {
 });
 
 //
-var clientsByChannel = {}; // Retrieve all clients in a channel
+var clientsByChannel = {}; // Retrieve all clients in a channel and their auth
 var channelByClient = {}; // Retrieve what channel a client is connected
+var clients = {}; // Store client's socket objects
 
 _construct();
 
@@ -66,50 +68,51 @@ function _construct() {
 
     // Handle redis broacasts
     redisSub.on('message', function (c, response) {
-        // Decode response
-        response = msgpack.decode(response);
-
-        _dispatch(response.sendTo, {
-            operation: response.operation,
-            data: response.data
-        });
+        // Decode and dispatch response
+        _dispatch(msgpack.decode(response));
     });
 }
 
 // # Create Channel
 function _createChannel(channelId) {
-    debug('Channel created ' + channelId);
     clientsByChannel[channelId] = {};
 }
 
 // # Delete Channel
 function _deleteChannel(channelId) {
-    debug('Channel closed ' + channelId);
     delete clientsByChannel[channelId];
 }
 
 // # Dispatch
-function _dispatch(sendTo, data) {
-    // Iterate channel to look for clients
-    while (sendTo.length > 0) {
-        //
-        var channelId = sendTo.shift();
+function _dispatch(response) {
+    //
+    var channels = [
+        [response.to.account, response.to.table].join('/'), // Collection channel
+        [response.to.account, response.to.table, response.to.key].join('/') // Item channel
+    ];
 
+    // Fetch table's rules
+    var rules = rulesModel.get(response.to.table);
+
+    channels.forEach(function (channelId) {
         // Test if there are clients in this channelId
         if (!_.isEmpty(clientsByChannel[channelId])) {
-            // Yes, there are
-            debug('Dispatching to ' + channelId);
-
-            // Get clients inside this channelId
-            _.each(clientsByChannel[channelId], function (clientSocket) {
+            //
+            securityModel.filterClients({
+                account: response.to.account,
+                // get clients inside channel id
+                clients: clientsByChannel[channelId],
+                data: response.data,
+                rules: rules
+            }).forEach(function (id) {
                 try {
-                    clientSocket.send(JSON.stringify(data));
+                    clients[id].send(JSON.stringify(response));
                 } catch (err) {
-                    debug(err.message);
+                    console.log(err.message);
                 }
             });
         }
-    }
+    });
 }
 
 // # Publish
@@ -126,9 +129,11 @@ function _subscribeClient(clientId, clientSocket, channelId) {
     }
 
     // Subscribe client
-    debug('Client created ' + channelId + ' ' + clientId);
     channelByClient[clientId] = channelId;
-    clientsByChannel[channelId][clientId] = clientSocket;
+    clientsByChannel[channelId][clientId] = {
+        id: 10
+    };
+    clients[clientId] = clientSocket;
 }
 
 // # Unsubscrbe Client
@@ -136,9 +141,9 @@ function _unsubscribeClient(clientId) {
     // Seek what channelId this client is connected
     var channelId = channelByClient[clientId];
 
-    // Delete client from channelId
-    debug('Client closed ' + channelId, clientId);
+    // Delete client from channelId, and client obj
     delete clientsByChannel[channelId][clientId];
+    delete clients[clientId];
 
     // Test if there are more clients in this channelId, if no, delete it too
     if (_.isEmpty(clientsByChannel[channelId])) {

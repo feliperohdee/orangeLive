@@ -2,9 +2,7 @@
 (function () {
     //
     'use strict';
-    
-    var Instance = OrangeLive.prototype.Instance;
-    
+
     Instance.prototype.requests = function () {
         //
         var self = this;
@@ -22,6 +20,16 @@
         };
 
         /*=========================*/
+        
+        // # Auth Socket
+        function stream(token) {
+            if (ws) {
+                ws.send(JSON.stringify({
+                    operation: 'auth',
+                    data: token
+                }));
+            }
+        }
 
         // # Request Del
         function del(params) {
@@ -33,7 +41,10 @@
             //
             $.ajax({
                 data: params || false,
-                url: '/api/' + _makeURL()
+                url: '/api/' + _makeURL(),
+                headers: self.auth.isAuth() ? ({
+                    Authorization: 'Bearer ' + self.auth.getToken()
+                }) : {}
             }).then(function (response) {
                 //
                 if (!_.isEmpty(response)) {
@@ -141,7 +152,10 @@
                 contentType: 'application/json',
                 data: params ? JSON.stringify(params) : false,
                 method: methodsMap[operation],
-                url: '/api/' + url
+                url: '/api/' + url,
+                headers: self.auth.isAuth() ? ({
+                    Authorization: 'Bearer ' + self.auth.getToken()
+                }) : {}
             }).fail(function (err) {
                 console.error({
                     status: err.status,

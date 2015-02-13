@@ -1,5 +1,7 @@
 // # Live API
 var liveModel = require('../models/live');
+var rulesModel = require('../models/rules');
+var securityModel = require('../models/security');
 var _ = require('lodash');
 
 module.exports = {
@@ -28,20 +30,58 @@ function insert(object, options) {
 
 // # Item
 function item(object) {
-    //
-    return liveModel.item(object);
+    // Fetch table's rules
+    var rules = rulesModel.get(object.table);
+
+    return liveModel.item(object).then(function (response) {
+        if (response) {
+            return securityModel.canRead({
+                account: object.account,
+                auth: object._auth,
+                data: response.data,
+                rules: rules
+            }).then(function () {
+                return response;
+            });
+        }
+    });
 }
 
 // # Query
 function query(object) {
-    //
-    return liveModel.query(object);
+    // Fetch table's rules
+    var rules = rulesModel.get(object.table);
+
+    return liveModel.query(object).then(function (response) {
+        if (response) {
+            return securityModel.canRead({
+                account: object.account,
+                auth: object._auth,
+                data: response.data,
+                rules: rules
+            }, true).then(function () {
+                return response;
+            });
+        }
+    });
 }
 
 // # Update
 function update(object, options) {
-    // Extend object with options n' indexes
-    _.extend(object, options);
+    // Fetch table's rules
+    var rules = rulesModel.get(options.table);
 
-    return liveModel.update(object);
+    // Extend object with options n' indexes
+    _.extend(object, options, {
+        indexes: rules.indexes
+    });
+
+    return securityModel.canWrite({
+        account: object.account,
+        auth: object._auth,
+        data: object.set,
+        rules: rules
+    }).then(function () {
+        return liveModel.update(object);
+    });
 }

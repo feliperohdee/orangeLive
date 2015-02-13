@@ -6,18 +6,18 @@ function OrangeLive() {
     var self = this;
     
     self.instances = [];
+    self.auth = Auth();
 }
 
 // # Instance
 OrangeLive.prototype.instance = function (address) {
     //
     var self = this;
-    
-    var instance = new self.Instance(address);
+    var instance = new Instance(address, self.auth);
 
     // Store a instance reference
     self.instances.push(instance);
 
     // Expose just API
-    return instance.api();
+    return instance.api;
 };

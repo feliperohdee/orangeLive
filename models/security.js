@@ -7,82 +7,110 @@ var vm = require('vm');
 
 module.exports = {
     canRead: canRead,
-    canWrite: canWrite
+    canWrite: canWrite,
+    filterClients: filterClients
 };
 
 /*----------------------------*/
 
-// # Can Write
-function canWrite(rules, params) {
-    //
-    var acl = rules[params.table] ? rules[params.table].acl || rules.acl : false;
-    var schema = rules[params.table] ? _.clone(rules[params.table].schema) : false;
+// # Can Read
+function canRead(params, isCollection) {
+    var acl = params.rules.acl;
     var context = vm.createContext(_getContext(params));
+    var resultStack = {
+        acl: true
+    };
 
     return Promise.try(function () {
-        // # Schema (resolve async tasks, compile  n' execute async functions and replace with static values)
-        if (schema) {
-            //
-            var tasks = [];
+        // # Validate ACL's
+        if (acl._read) {
+            if (isCollection) {
+                // Create script to run multiple times
+                var script = new vm.Script(acl._read);
 
-            // Seek for async functions like "attr"
-            _.keys(context.value).forEach(function (key) {
-                if (schema[key] && key !== '_other') {
-                    //
-                    var asyncFns = schema[key].match(/(attr)\(["'].*["']\)/g);
+                resultStack.acl = !_.every(params.data, function (data) {
+                    // Update context data
+                    context.data = data;
 
-                    if (asyncFns) {
-                        // Iterate over all functions in this rule
-                        asyncFns.forEach(function (asyncFn) {
-                            // Push them to tasks in an array to be monitored via Promise.all
-                            tasks.push(vm.runInContext(asyncFn, context).then(function (response) {
-                                // Replace schema rule with static value
-                                schema[key] = schema[key].replace(asyncFn, response);
-                            }));
-                        });
-                    }
-                }
-            });
-
-            return Promise.all(tasks);
+                    return script.runInContext(context);
+                });
+            } else {
+                resultStack.acl = !vm.runInContext(acl._read, context);
+            }
         }
     }).then(function () {
-        // Create result Stack
-        return {
-            acl: true,
-            outOfKeys: [],
-            outOfRules: []
-        };
-    }).then(function (resultStack) {
-        // # ACL's
+        if (resultStack.acl) {
+            // ACL Error
+            throw new errors.securityError();
+        }
+
+        return true;
+    });
+}
+
+// # Can Write
+function canWrite(params) {
+    //
+    var acl = params.rules.acl;
+    var context = vm.createContext(_getContext(params));
+    var schema = _.clone(params.rules.schema);
+    var resultStack = {
+        acl: true,
+        outOfKeys: [],
+        outOfRules: []
+    };
+
+    return Promise.try(function () {
+        // # Validate ACL's
         if (acl._save) {
             resultStack.acl = !vm.runInContext(acl._save, context);
         }
-
-        return resultStack;
-    }).then(function (resultStack) {
-        // # Schema (resolve keys and sync rules)
+    }).then(function () {
+        // # Validate Schema
         if (schema) {
             var acceptOther = _.isBoolean(schema._other) ? schema._other : true;
+            var asyncTasks = [];
 
-            // Iterate over value keys
-            _.keys(context.value).forEach(function (key) {
-                if (key !== '_other') {
-                    // if not accept others, test if exists in schema keys
-                    if (!acceptOther && !schema[key]) {
-                        resultStack.outOfKeys.push(key);
-                    }
+            // Iterate over data keys to seek for schema rules
+            _.chain(context.data).keys().each(function (key) {
+                //
+                var rule = schema[key];
 
-                    // Test rules
-                    if (schema[key] && !vm.runInContext(schema[key], context)) {
-                        resultStack.outOfRules.push(key);
+                // Test schema keys
+                if (!acceptOther && !rule) {
+                    resultStack.outOfKeys.push(key);
+                }
+
+                // test schema rules
+                if (rule) {
+                    // Test if is there async functions
+                    var asyncFns = _isAsyncFns(rule);
+                    // Define resolver function
+                    var resolveRule = function (rule, context) {
+                        if (!vm.runInContext(rule, context)) {
+                            resultStack.outOfRules.push(key);
+                        }
+                    };
+
+                    if (!asyncFns) {
+                        // If no async function, just resolve and keep processing
+                        resolveRule(rule, context);
+                    } else {
+                        // Otherwise, create tasks to resolve asynchronous functions first
+                        asyncTasks.push(_resolveAsyncFns(rule, asyncFns, context).then(function (rule) {
+                            // After done resolve 
+                            resolveRule(rule, context);
+                        }));
                     }
                 }
-            });
-        }
+            }).value();
 
-        return resultStack;
-    }).then(function (resultStack) {
+            // If is there async functions, wait for all done
+            if (asyncTasks.length) {
+                return Promise.all(asyncTasks);
+            }
+        }
+    }).then(function () {
         if (resultStack.acl) {
             // ACL Error
             throw new errors.securityError();
@@ -102,108 +130,38 @@ function canWrite(rules, params) {
     });
 }
 
-// # Can Read
-function canRead(rules, params, isCollection) {
-    var acl = rules[params.table] ? rules[params.table].acl || rules.acl : false;
+// # Filter Clients {use for socket, no promises for agility}
+function filterClients(params) {
+    //
     var context = vm.createContext(_getContext(params));
+    var script = new vm.Script(params.rules.acl._read);
+    var clients = [];
 
-    return Promise.try(function () {
-        // Create result Stack
-        return {
-            acl: true
-        };
-    }).then(function (resultStack) {
-        // # ACL's
-        if (acl._read) {
-            if (isCollection) {
-                // Create script to run multiple times
-                var script = new vm.Script(acl._read);
+    _.each(params.clients, function (auth, id) {
+        // Update context auth
+        context.auth = auth;
 
-                resultStack.acl = !_.every(params.data, function (data) {
-                    // Update context data
-                    context.value = data;
-
-                    return script.runInContext(context);
-                });
-            }else{
-                resultStack.acl = !vm.runInContext(acl._read, context);
-            }
+        // Validate rule against value
+        if (script.runInContext(context)) {
+            clients.push(id);
         }
-        
-        return resultStack;
-    }).then(function (resultStack) {
-        if (resultStack.acl) {
-            // ACL Error
-            throw new errors.securityError();
-        }
-        
-        return true;
     });
-}
 
-// # Get context to validator's VM
-function _getContext(params) {
-    return {
-        // # Attr {alias for getAttr}
-        attr: function (attr) {
-            return _getAttr(attr, params);
-        },
-        // # Auth
-        auth: {
-            userId: 10,
-            id: 9
-        },
-        // # // # Schema Validator
-        must: function (testCase, testedValue, value) {
-            // Describe test cases
-            var testCases = {
-                beBoolean: function (testedValue) {
-                    return _.isBoolean(testedValue);
-                },
-                beEquals: function (testedValue) {
-                    return testedValue === value;
-                },
-                beNumber: function (testedValue) {
-                    return _.isNumber(testedValue);
-                },
-                beString: function (testedValue) {
-                    return _.isString(testedValue);
-                },
-                contains: function (testedValue) {
-                    return _.contains(value, testedValue);
-                },
-                exists: function (testedValue) {
-                    if (_.isObject(testedValue) || _.isArray(testedValue)) {
-                        return !_.isEmpty(testedValue);
-                    }
-
-                    return !_.isUndefined(testedValue) && !_.isNull(testedValue);
-                }
-            };
-
-            // Execute test cases
-            return testCases[testCase](testedValue, value);
-        },
-        // # Schema Validator :now
-        now: function () {
-            return +new Date;
-        },
-        // # Value
-        value: params.data || {}
-    };
+    return clients;
 }
 
 // # Get Attr Logic
-function _getAttr(attr, params) {
+function _getAttr(params, attr) {
     // Split attr to append into params
     attr = attr.split('/');
 
     // Extend params with attr splitted
-    _.extend(params, {
+    params = {
+        account: params.account,
         table: attr[0],
         key: attr[1],
         select: attr[2] || false
-    });
+    };
 
     return Promise.try(function () {
         // Validations
@@ -253,5 +211,72 @@ function _getAttr(attr, params) {
         } catch (err) {
             throw err;
         }
+    });
+}
+
+// # Get context to validator's VM
+function _getContext(params) {
+    return {
+        // # Attr {alias for getAttr}
+        attr: function (attr) {
+            return _getAttr(params, attr);
+        },
+        // # Auth
+        auth: params.auth || {},
+        // # Data
+        data: params.data || {},
+        // # Schema Validator :boolean
+        isBoolean: function (value) {
+            return _.isBoolean(value);
+        },
+        // # Schema Validator :equals
+        isEquals: function (value, eqValue) {
+            return value === eqValue;
+        },
+        // # Schema Validator :number
+        isNumber: function (value) {
+            return _.isNumber(value);
+        },
+        // # Schema Validator :string
+        isString: function (value) {
+            return _.isString(value);
+        },
+        // # Schema Validator :contains
+        contains: function (cnValue, value) {
+            return _.contains(cnValue, value);
+        },
+        // # Schema Validator :exists
+        exists: function (value) {
+            if (_.isObject(value) || _.isArray(value)) {
+                return !_.isEmpty(value);
+            }
+
+            return !_.isUndefined(value) && !_.isNull(value);
+        },
+        // # Schema Validator :now
+        now: function () {
+            return +new Date;
+        }
+    };
+}
+
+// # Seek for async functions
+function _isAsyncFns(rule) {
+    return rule.match(/(attr)\(["'][a-z0-9A-Z\/]*["']\)/g);
+}
+
+// # Resolve asynchronous function in a rule
+function _resolveAsyncFns(rule, fns, context) {
+    // Iterate over all async functions in this rule
+    var tasks = _.map(fns, function (fn) {
+        // Push them to tasks array to be monitored via Promise.all
+        return vm.runInContext(fn, context).then(function (response) {
+            // Replace rule with static value
+            rule = rule.replace(fn, response);
+        });
+    });
+
+    return Promise.all(tasks).then(function () {
+        return rule;
     });
 }

@@ -13,7 +13,6 @@ module.exports = {
     discoverIndex: discoverIndex,
     encodeIndexSet: encodeIndexSet,
     getObjectValue: getObjectValue,
-    hasIndexes: hasIndexes,
     insert: insert,
     item: item,
     normalizeReponseData: normalizeReponseData,
@@ -178,15 +177,6 @@ function discoverIndex(indexes, index) {
     }
 
     return result;
-}
-
-// # Has Indexes
-function hasIndexes(rules, table) {
-    if (rules[table] && rules[table].indexes) {
-        return rules[table].indexes;
-    }
-
-    return false;
 }
 
 // # Encode Index Set

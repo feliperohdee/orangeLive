@@ -16,16 +16,39 @@ module.exports = {
 
 // # Del
 function del(object) {
-    //
-    return liveModel.del(object);
+    // Fetch table's rules
+    var rules = rulesModel.get(object.table);
+    
+    return securityModel.canDel({
+        account: object.account,
+        auth: object._auth,
+        data: {
+            key: object.key
+        },
+        rules: rules
+    }).then(function () {
+        return liveModel.del(object);
+    });
 }
 
 // # Insert
 function insert(object, options) {
-    // Extend object with options n' indexes
-    _.extend(object, options);
+    // Fetch table's rules
+    var rules = rulesModel.get(options.table);
 
-    return liveModel.insert(object);
+    // Extend object with options n' indexes
+    _.extend(object, options, {
+        indexes: rules.indexes
+    });
+
+    return securityModel.canWrite({
+        account: object.account,
+        auth: object._auth,
+        data: object.set,
+        rules: rules
+    }).then(function () {
+        return liveModel.insert(object);
+    });
 }
 
 // # Item

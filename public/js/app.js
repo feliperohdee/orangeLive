@@ -41,7 +41,7 @@ var instance = orangeLive.instance('dlBSd$ib89$Be2/users').on('load', function (
          */
 
         setTimeout(function () {
-            instance.remove(item.key());
+            //instance.remove(data.key());
         }, 1000);
     }
 

@@ -4,14 +4,63 @@ var Promise = require('bluebird');
 var base = require('./base');
 var errors = require('errors');
 var vm = require('vm');
+var staticContext;
+
+__construct();
 
 module.exports = {
+    canDel: canDel,
     canRead: canRead,
     canWrite: canWrite,
     filterClients: filterClients
 };
 
 /*----------------------------*/
+
+// # Constructor
+function __construct() {
+    staticContext = _getStaticContext();
+}
+
+// # Can Del
+function canDel(params) {
+    var aclRule = params.rules.acl && params.rules.acl._remove ? params.rules.acl._remove : false;
+    var context = vm.createContext(_getContext(params));
+    var errorStack = {
+        acl: true
+    };
+
+    return Promise.try(function () {
+        // # Validate ACL's
+        if (aclRule) {
+            // Define resolver function
+            var resolveAcl = function (rule) {
+                errorStack.acl = !vm.runInContext(rule, context);
+            };
+
+            // Test if is there async functions
+            var asyncFns = _isAsyncFns(aclRule);
+
+            if (!asyncFns) {
+                // If no async function, just resolve and keep processing
+                resolveAcl(aclRule);
+            } else {
+                // Otherwise, resolve asynchronous functions first
+                return _resolveAsyncFns(asyncFns, aclRule, context).then(function (staticRule) {
+                    // After done resolve 
+                    resolveAcl(staticRule);
+                });
+            }
+        }
+    }).then(function () {
+        if (errorStack.acl) {
+            // ACL Error
+            throw new errors.securityError();
+        }
+
+        return true;
+    });
+}
 
 // # Can Read
 function canRead(params, isCollection) {
@@ -274,9 +323,9 @@ function _getAttr(params, attr) {
     });
 }
 
-// # Get context to validator's VM
+// # Get context to validator's VM {Extend dynamic with static context}
 function _getContext(params) {
-    return {
+    return _.extend({
         // # Attr {alias for getAttr}
         attr: function (attr) {
             return _getAttr(params, attr);
@@ -284,7 +333,13 @@ function _getContext(params) {
         // # Auth
         auth: params.auth || {},
         // # Data
-        data: params.data || {},
+        data: params.data || {}
+    }, staticContext);
+}
+
+// # Get static context
+function _getStaticContext() {
+    return {
         // # Schema Validator :boolean
         isBoolean: function (value) {
             return _.isBoolean(value);
@@ -322,7 +377,11 @@ function _getContext(params) {
 
 // # Seek for async functions
 function _isAsyncFns(rule) {
-    return rule.match(/attr\(['"][^\(\)]+['"]\)/g);
+    if (_.isString(rule)) {
+        return rule.match(/attr\(['"][^\(\)]+['"]\)/g);
+    }
+
+    return false;
 }
 
 // # Resolve asynchronous function in a rule

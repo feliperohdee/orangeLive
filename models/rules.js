@@ -4,8 +4,8 @@ var rules = {
         // # Access Control List
         acl: {
             _save: 'isBoolean(attr("users/rohde" + 1 + "/subscribed")) && auth.id >= 10',
-            _remove: 'auth.id',
-            _read: 'isNumber(9) && auth.id && data.age > 0'
+            _remove: true,
+            _read: 'isBoolean(attr("users/rohde" + 1 + "/subscribed")) && auth.id && data.age !== 0'
         },
         // # Indexes
         indexes: {

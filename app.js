@@ -2,7 +2,6 @@ var debug = require('debug')('orangeLive');
 var express = require('express');
 
 /*==== Servers Config =====*/
-
 var app = express();
 
 // HTTP Server
@@ -21,15 +20,15 @@ var ws = new WebSocketServer({
 
 // Expose ws as global
 global.ws = ws;
-
 /*==== Servers Config - End =====*/
 
 var path = require('path');
 var favicon = require('serve-favicon');
 var logger = require('morgan');
-var errors = require('./errors');
 var bodyParser = require('body-parser');
 var hbs = require('hbs');
+var memory = require('./memory');
+var errors = require('./errors');
 var middleware = require('./middleware');
 var routes = require('./routes');
 

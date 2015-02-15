@@ -3,6 +3,7 @@ var _ = require('lodash');
 var Promise = require('bluebird');
 var base = require('./base');
 var errors = require('errors');
+var Evaluator = require('./evaluator');
 var vm = require('vm');
 var staticContext;
 
@@ -64,53 +65,33 @@ function canDel(params) {
 
 // # Can Read
 function canRead(params, isCollection) {
-    var aclRule = params.rules.acl && params.rules.acl._read ? params.rules.acl._read : false;
-    var context = vm.createContext(_getContext(params));
-    var errorStack = {
-        acl: true
-    };
+    var acl = params.rules.acl && params.rules.acl._read ? params.rules.acl._read : false;
+    var evaluator = new Evaluator({}, params);
 
     return Promise.try(function () {
         // # Validate ACL's
-        if (aclRule) {
-            // Define resolver function
-            var resolveAcl = function (rule) {
-                // Create script to run multiple times if needed
-                var script = new vm.Script(rule);
+        if (acl) {
+            if (isCollection) {
+                return Promise.each(params.data, function (data) {
+                    // Update context data
+                    evaluator.updateData(data);
 
-                if (isCollection) {
-                    errorStack.acl = _.every(params.data, function (data) {
-                        // Update context data
-                        context.data = data;
-
-                        return !script.runInContext(context);
+                    return evaluator.parse(acl).then(function (response) {
+                        if (!response) {
+                            // ACL Error
+                            throw new errors.securityError();
+                        }
                     });
-                } else {
-                    errorStack.acl = !script.runInContext(context);
-                }
-            };
-
-            // Test if is there async functions
-            var asyncFns = _isAsyncFns(aclRule);
-
-            if (!asyncFns) {
-                // If no async function, just resolve and keep processing
-                resolveAcl(aclRule);
+                });
             } else {
-                // Otherwise, resolve asynchronous functions first
-                return _resolveAsyncFns(asyncFns, aclRule, context).then(function (staticRule) {
-                    // After done resolve 
-                    resolveAcl(staticRule);
+                return evaluator.parse(acl).then(function (response) {
+                    if (!response) {
+                        // ACL Error
+                        throw new errors.securityError();
+                    }
                 });
             }
         }
-    }).then(function () {
-        if (errorStack.acl) {
-            // ACL Error
-            throw new errors.securityError();
-        }
-
-        return true;
     });
 }
 

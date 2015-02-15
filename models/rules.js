@@ -3,9 +3,9 @@ var rules = {
     users: {
         // # Access Control List
         acl: {
-            _save: 'isBoolean(attr("users/rohde" + 1 + "/subscribed")) && auth.id >= 10',
+            _save: 'auth.id >= 10',
             _remove: true,
-            _read: 'isBoolean(attr("users/rohde" + 1 + "/subscribed")) && auth.id && data.age !== 0'
+            _read: 'auth.id && data.age !== 0'
         },
         // # Indexes
         indexes: {
@@ -15,7 +15,7 @@ var rules = {
         // # Schema
         schema: {
             name: 'isBoolean(attr("users/rohde1/subscribed")) && isString(data.name)',
-            age: 'isBoolean(attr("users/rohde" + 1 + "/subscribed")) && isNumber(data.age) && data.age !== 0',
+            age: 'isNumber(data.age) && data.age !== 0',
             _other: true
         }
     }

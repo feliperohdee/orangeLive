@@ -53,13 +53,6 @@ function _construct() {
 
             // Append Channel Id
             response.sendTo = [channelId];
-
-            // Choose method and handle it
-            switch (response.operation) {
-                case 'stream':
-                    publish(response);
-                    break;
-            }
         });
     });
 

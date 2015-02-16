@@ -14,22 +14,11 @@
             del: del,
             insert: insert,
             item: item,
-            stream: stream,
             query: query,
             update: update
         };
 
         /*=========================*/
-        
-        // # Auth Socket
-        function stream(token) {
-            if (ws) {
-                ws.send(JSON.stringify({
-                    operation: 'auth',
-                    data: token
-                }));
-            }
-        }
 
         // # Request Del
         function del(params) {
@@ -162,16 +151,6 @@
                     message: err.responseJSON
                 });
             });
-        }
-
-        // # Stream {stream without persistence, is called direct os websocket layer}
-        function stream(data) {
-            if (ws) {
-                ws.send(JSON.stringify({
-                    operation: 'stream',
-                    data: data
-                }));
-            }
         }
 
         // # Subscribe {listen sockets}

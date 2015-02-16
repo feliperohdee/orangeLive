@@ -1,7 +1,7 @@
 // # App
 var orangeLive = new OrangeLive();
 
-var instance = orangeLive.instance('dlBSd$ib89$Be2/users').on('load', function (data, count, pagination) {
+var instance = orangeLive.instance('dlBSd$ib89$Be2/users').indexedBy('age').on('load', function (data, count, pagination) {
     //console.log('instance 1', data);
     //console.log('instance 1 count', count);
 
@@ -116,25 +116,25 @@ function pushList() {
 }
 
 /*
-var instance3 = orangeLive.instance('dlBSd$ib89$Be2/users/rohde5').on('load', function (data) {
-    //console.log('instance 3', data);
-}).on('save', function (data) {
-    console.log('instance 3 On save Event', data);
-});
-
-function updateWithCondition() {
-    instance3.saveWithCondition(function (data) {
-        if (data.rule) {
-            return {
-                rule: {
-                    type: 'condition',
-                    description: 'hello'
-                }
-            };
-        }
-    });
-}
-*/
+ var instance3 = orangeLive.instance('dlBSd$ib89$Be2/users/rohde5').on('load', function (data) {
+ //console.log('instance 3', data);
+ }).on('save', function (data) {
+ console.log('instance 3 On save Event', data);
+ });
+ 
+ function updateWithCondition() {
+ instance3.saveWithCondition(function (data) {
+ if (data.rule) {
+ return {
+ rule: {
+ type: 'condition',
+ description: 'hello'
+ }
+ };
+ }
+ });
+ }
+ */
 
 function getRandomInt(min, max) {
     return Math.floor(Math.random() * (max - min)) + min;

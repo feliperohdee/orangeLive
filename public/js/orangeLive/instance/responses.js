@@ -54,9 +54,6 @@
                     // Dispatch Events
                     goEvent(['load'], response.data);
                     break;
-                case 'stream':
-                    goEvent(['stream'], response.data);
-                    break;
                 default:
                     console.log(operation, response);
             }
@@ -88,8 +85,7 @@
                         case 'save':
                         case 'save:insert':
                         case 'save:update':
-                        case 'stream':
-                            // When event is save || stream, throw just last transaction data
+                            // When event is save, throw just last transaction data
                             callback(data);
                             break;
                         default:

@@ -74,6 +74,11 @@ function item(object) {
 function query(object) {
     // Fetch table's rules
     var rules = rulesModel.get(object.table);
+    
+    // Extend object with indexes
+    _.extend(object, {
+        indexes: rules.indexes
+    });
 
     return liveModel.query(object).then(function (response) {
         if (response) {

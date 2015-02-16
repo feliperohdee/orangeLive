@@ -2,6 +2,7 @@
 var _ = require('lodash');
 var Promise = require('bluebird');
 var base = require('./base');
+var errors = require('errors');
 var broadcastModel = require('./broadcast');
 var cuid = require('cuid');
 
@@ -173,6 +174,11 @@ function query(object) {
         } else if (object.indexedBy && object.indexes) {
             // Discover and get Index
             var index = base.discoverIndex(object.indexes, object.indexedBy);
+            
+            // If no index, throw an error
+            if(!index){
+                throw new errors.indexError();
+            }
 
             // Set indexed by
             queryObject.indexedBy = index.name;

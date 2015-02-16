@@ -40,3 +40,11 @@ errors.create({
     defaultMessage: 'Out of Schema Rules Error.',
     defaultExplanation: 'One or more provided values is/are out of schema rules.'
 });
+
+// # Index Error
+errors.create({
+    name: 'indexError',
+    code: 500,
+    defaultMessage: 'Unexistent Index.',
+    defaultExplanation: 'The index provided is inexistent, you need define it in your table\'s rules.'
+});

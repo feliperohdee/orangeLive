@@ -129,11 +129,6 @@
 
             // # Indexed By {Define index to be used}
             function indexedBy(index) {
-                // Test if index is defined and no equals priority
-                if (self.indexes.string.indexOf(index) < 0 && self.indexes.number.indexOf(index) < 0 && index !== 'priority') {
-                    console.error('The index %s is not defined, the collection won\'t be ordenated or fetched by this index.', index);
-                }
-
                 _indexedBy = index;
 
                 return this;

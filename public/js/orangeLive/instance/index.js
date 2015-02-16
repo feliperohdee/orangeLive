@@ -12,12 +12,6 @@ function Instance(address, auth) {
     self.auth = auth;
     self.helpers = self.helpers();
 
-    // TEMPORARY
-    self.indexes = {
-        string: ['name'],
-        number: ['height', 'age']
-    };
-
     self.instance;
     self.isCollection = false;
     self.requestsManager = self.requests();
@@ -40,27 +34,9 @@ function Instance(address, auth) {
         }
 
             // Extend API with shared API
-            self.instance.api = _.extend(self.instance.api(), sharedAPI());
+            self.instance.api = self.instance.api();
 
         // Return instance
         return self.instance;
-    }
-
-    // Shared API either item and collection
-    function sharedAPI() {
-        //
-        return{
-            stream: stream
-        };
-
-        /*----------------------------*/
-
-        // # Stream
-        function stream(data) {
-            //
-            self.requestsManager.stream({
-                data: data
-            });
-        }
     }
 }

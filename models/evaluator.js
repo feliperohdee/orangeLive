@@ -157,18 +157,22 @@ Evaluator.prototype.parse = function (code) {
                 'now',
                 'auth',
                 'data',
-                'return !!(' + code + ')').bind(self);
+                'return !!(' + code + ')');//.bind(self);
 
-        return fn(
-                self.isBoolean,
-                self.isEquals,
-                self.isNumber,
-                self.isString,
-                self.contains,
-                self.exists,
-                self.now,
-                self.auth,
-                self.data);
+        // Build globals
+        var globals = [
+            self.isBoolean,
+            self.isEquals,
+            self.isNumber,
+            self.isString,
+            self.contains,
+            self.exists,
+            self.now,
+            self.auth,
+            self.data
+        ];
+
+        return fn.apply(self, globals);
     });
 };
 
@@ -182,12 +186,16 @@ Evaluator.prototype._resolveAsyncCode = function (asyncCodes, code) {
         var fn = new Function(
                 'auth',
                 'data',
-                'return this._' + asyncCode).bind(self);
+                'return this._' + asyncCode);//.bind(self);
+
+        // Build globals
+        var globals = [
+            self.auth,
+            self.data
+        ];
 
         // Return a Promise
-        return fn(
-                self.auth,
-                self.data).then(function (response) {
+        return fn.apply(self, globals).then(function (response) {
             // Replace async code by static value
             code = code.replace(asyncCode, response);
         });

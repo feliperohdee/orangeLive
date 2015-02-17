@@ -1,0 +1,10 @@
+cmd + r => show function
+cmd + f => find
+ctrl + h => find replace
+cmd + shift + f => auto indent
+cmd + p || cmd + t => find file
+cmd + shift + {arrow up/down} => duplicate line
+cmd + shift + p => good menu
+ctrl + j => jshint
+
+Hold cmd and select words to change, like Cmd+D but for diferent words

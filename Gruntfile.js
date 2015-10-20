@@ -12,6 +12,14 @@ module.exports = function(grunt) {
                     stderr: true
                 },
                 command: 'java -Djava.library.path=dynamodb/DynamoDBLocal_lib -jar dynamodb/DynamoDBLocal.jar -port 9090 -dbPath dynamodb/liveorange'
+            },
+            redisStart: {
+                options: {
+                    async: true,
+                    stdout: true,
+                    stderr: true
+                },
+                command: 'redis-server'
             }
         },
         // watch
@@ -55,6 +63,7 @@ module.exports = function(grunt) {
             grunt.log.writeln();
             grunt.log.writeln('Running before exit tasks [=');
             grunt.task.run(['shell:dynamoStart:kill']);
+            grunt.task.run(['shell:redisStart:kill']);
             grunt.task.current.async()();
         });
     });
@@ -62,6 +71,7 @@ module.exports = function(grunt) {
     // # Default
     grunt.registerTask('dev', [
         'shell:dynamoStart',
+        'shell:redisStart',
         'express:dev',
         'beforeExit',
         'watch'

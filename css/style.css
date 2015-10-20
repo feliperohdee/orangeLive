@@ -1,0 +1,76 @@
+body{
+	background-color: #fff;
+	font-family: 'Open Sans', sans-serif;
+}
+
+pre{
+	border: 0;
+	padding: 0;
+	font-size: 17px;
+}
+
+.condensed pre{
+	border: 1px solid #ccc;
+	font-size: 13px;
+}
+
+h1{
+	font-weight: 800;
+	color: #35393b;
+}
+
+h1.large{
+	font-weight: 800;
+	font-size: 45px;
+	letter-spacing: -2px;
+}
+
+@media(max-width: 760px){
+	h1.large{
+		font-size: 20px;
+	}
+}
+
+p{
+	margin: 0 auto 4.5rem auto;
+	font-size: 1.6rem;
+	line-height: 1.5em;
+	font-weight: 300;
+	color: #7d878a;
+}
+
+.container{
+	padding: 60px;
+}
+
+.phone-chart{
+	position: absolute;
+	bottom: 0;
+}
+
+.phone-cloud{
+	text-align: center;
+	margin-top: 40%;
+}
+
+.phone-cloud .fa-stack-2x{
+	color: #35393b;
+}
+
+/* Valign */
+.v-align{
+	overflow: hidden;
+}
+
+.v-align div[class*='col-'] {
+	float:none;
+	display:inline-block;
+	vertical-align:middle;
+	margin-right:-4px;
+}
+
+@media(max-width: 768px){
+	.v-align div[class*='col-'] {
+		margin: 5px auto;
+	}
+}

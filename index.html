@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en" ng-app="app">
+<head>
+	<meta charset="UTF-8">
+	<title>Orange Live | Store & Sync data in realtime.</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, user-scalable=no">
+	<link rel="stylesheet" type="text/css" href="./bower_components/highlightjs/styles/ascetic.css">
+	<link rel="stylesheet" type="text/css" href="./bower_components/angular-chart.js/dist/angular-chart.css">
+	<link rel="stylesheet" type="text/css" href="./bower_components/bootstrap/dist/css/bootstrap.min.css">
+	<link rel="stylesheet" type="text/css" href="./bower_components/components-font-awesome/css/font-awesome.min.css">
+	<link rel="stylesheet" type="text/css" href="http://fonts.googleapis.com/css?family=Open+Sans:300,400,800">
+	<link rel="stylesheet" type="text/css" href="./css/devices.css">
+	<link rel="stylesheet" type="text/css" href="./css/style.css">
+</head>
+<body ng-controller="mainController as Ctrl">
+	<div class="container">
+		<div class="device-container left-phone">
+			<!-- Phone -->
+			<section class="phone">
+				<header>
+					<span class="phone-camera"><span class="hidden">Camera</span></span>
+					<span class="phone-earpiece"><span class="hidden">Earpiece</span></span>
+					<span class="phone-homebutton"><span class="hidden">Homebutton</span></span>
+				</header>
+				<section class="content">
+
+					<div class="phone-cloud">
+						<span class="fa-stack fa-lg">
+							<i class="fa fa-cloud fa-stack-2x"></i>
+							<i class="fa fa-refresh fa-spin fa-inverse fa-stack-1x"></i>
+						</span>
+					</div>
+
+					<canvas class="chart chart-bar phone-chart"
+					data="Ctrl.chart.data"
+					labels="Ctrl.chart.labels"
+					colours="Ctrl.chart.colours"
+					options="Ctrl.chart.options"></canvas>
+				</section>
+			</section>
+
+			<!-- Browser -->
+			<section class="browser">
+				<header>
+					<span class="button1"><span class="hidden">Button1</span></span>
+					<span class="button2"><span class="hidden">Button2</span></span>
+					<span class="button3"><span class="hidden">Button3</span></span>
+					<span class="fullscreen"><span class="hidden">Full Screen</span></span>
+				</header>
+				<section class="content">
+					<h1 class="large text-center">Store & Sync data <br> in realtime.</h1>
+					<p class="lead text-center">Real infinite possibilities.</p>
+
+					<canvas class="chart chart-bar"
+					data="Ctrl.chart.data"
+					labels="Ctrl.chart.labels"
+					colours="Ctrl.chart.colours"
+					options="Ctrl.chart.options"></canvas>
+				</section>
+			</section>
+		</div>
+
+		<div class="row">
+			<div class="col-md-8 col-md-offset-2 col-lg-8 col-lg-offset-2">
+				<p class="lead text-center">
+					Orange Live is a hosted NoSQL solution which maintains all data synchronized and organized across all connected instances.
+				</p>
+			</div>
+		</div>
+
+		<div class="row v-align">
+			<div class="col-xs-12 col-sm-12 col-md-6 col-lg-6">
+				<h1>Self Clustered</h1>
+				<p>
+					Data is stored and replicated across three data centers, and the persistence is just validated when data is copied at least two of them. Furthermore, it provision more resources when needed, making your application high scalable, and self clustered.
+				</p>
+			</div>
+			<div class="col-xs-12 col-sm-12 col-md-6 col-lg-6">
+				<img src="./images/3x.png" class="img-responsive">
+			</div>
+		</div>
+
+		<div class="row v-align">
+			<div class="col-xs-12 col-sm-12 col-md-6 col-lg-6">
+				<div hljs compile="true" source="Ctrl.atomicJSON"></div>
+			</div>
+			<div class="col-xs-12 col-sm-12 col-md-6 col-lg-6">
+				<h1>Data Support</h1>
+				<p>
+					In addition to primitive types like Strings, Numbers and Boolean, Orange Live also supports Lists and JSON documents. Further, our database supports direct atomic operations in JSON's child nodes.
+				</p>
+			</div>
+		</div>
+
+		<div class="row v-align">
+			<div class="col-xs-12 col-sm-12 col-md-6 col-lg-6">
+				<h1>Realtime Binding</h1>
+				<p>
+					Data is automatically updated and ordered in all connected instances based on their indexes, if declared. Or just in determined instances based on table and instance rules.
+				</p>
+				<p>
+					Table rules are ACL's that defines who can read, save or remove data, and how and what attributes will be declared and feeded. It works together with authentication service to have data integrity and security.
+				</p>
+				<p>
+					All this services are enough to have just client-side applications, Orange Live database acts as a complete backend solution for your application.
+				</p>
+			</div>
+			<div class="col-xs-12 col-sm-12 col-md-6 col-lg-6">
+				<div hljs compile="true" source="Ctrl.playersJSON"></div>
+			</div>
+		</div>
+
+		<div class="row v-align">
+			<div class="col-md-8 col-md-offset-2 col-lg-8 col-lg-offset-2">
+				<h1 class="text-center">Simple API</h1>
+				<p class="lead text-center">
+					Orange Live uses a simple Javascript API to call all features. See some examples.
+				</p>
+			</div>
+		</div>
+
+		<div class="row v-align">
+			<div class="col-xs-12 col-sm-12 col-md-4 col-lg-4">
+				<h1>Declaration</h1>
+				<p>
+					Instances are ways to reference a table's collection or item. They are referenced using simple slash separated paths. To have a filtered set, is possible to declare some helpers methods.
+				</p>
+			</div>
+			<div class="col-xs-12 col-sm-12 col-md-8 col-lg-8">
+				<div hljs class="condensed" compile="true" source="Ctrl.declarationSrc" language="javascript"></div>
+			</div>
+		</div>
+
+		<div class="row v-align">
+			<div class="col-xs-12 col-sm-12 col-md-4 col-lg-4">
+				<h1>Load Event</h1>
+				<p>
+					Load event is dispatched when the server loads data at first time. Each data is a real object with <i>key()</i>, <i>value()</i>, <i>save()</i>, and <i>remove()</i> methods. Collections also have pagination and count attributes, the former is used to paginate the results with <i>prev()</i> and <i>next()</i> methods, and the latter is a static value containing the number of attributes fetched.
+				</p>
+			</div>
+			<div class="col-xs-12 col-sm-12 col-md-8 col-lg-8">
+				<div hljs class="condensed" compile="true" source="Ctrl.listenerSrc" language="javascript"></div>
+			</div>
+		</div>
+
+		<div class="row v-align">
+			<div class="col-xs-12 col-sm-12 col-md-4 col-lg-4">
+				<h1>Other Events</h1>
+				<p>
+					Some other events may be used, the main is <i>fetch event</i>. It is dispatched when some part of data is changed, at this way, when data is a collection, it will treat, update, and re-sort if needed, returning it already compiled. The <i>save event</i> returns just changed data (not all collection), when it is inserted or updated, at the same way, <i>remove event</i> returns just data's key.
+				</p>
+			</div>
+			<div class="col-xs-12 col-sm-12 col-md-8 col-lg-8">
+				<div hljs class="condensed" compile="true" source="Ctrl.otherEventsSrc" language="javascript"></div>
+			</div>
+		</div>
+
+		<div class="row v-align">
+			<div class="col-xs-12 col-sm-12 col-md-4 col-lg-4">
+				<h1>Setter Operations</h1>
+				<p>
+					Orange Live has some useful methods to set values, like <i>save()</i>, <i>saveWithCondition()</i>, <i>remove()</i>, <i>increment()</i>, <i>decrement()</i>, <i>pushList()</i> and another ones. The <i>saveWithCondition()</i> method is used to have a valid transaction, it means, just update in some circunstance.
+				</p>
+			</div>
+			<div class="col-xs-12 col-sm-12 col-md-8 col-lg-8">
+				<div hljs class="condensed" compile="true" source="Ctrl.operationsSrc" language="javascript"></div>
+			</div>
+		</div>
+
+		<div class="row v-align">
+			<div class="col-xs-12 col-sm-12 col-md-4 col-lg-4">
+				<h1>Rules</h1>
+				<p>
+					Rules are useful to keep the table's integrity, it means, we declare who, how and what the table can be changed. The rules are declared with JSON format via graphic console, and includes ACL's to read, save and remove, further, indexes declarations, and schema for that table. The only required set, is <i>ACL</i>, but is always good take care of your table.
+				</p>
+			</div>
+			<div class="col-xs-12 col-sm-12 col-md-8 col-lg-8">
+				<div hljs class="condensed" compile="true" source="Ctrl.rules" language="javascript"></div>
+			</div>
+		</div>
+
+		<h1 class="text-center">Coming Soon [:</h1>
+		<p class="lead text-center">
+			We're working hard, questions, feature request, or flaks talk to <a href="mailto:felipe@smallorange.co">felipe@smallorange.co</a>
+		</p>
+
+    <!-- Analytics -->
+    <script>
+    	(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+    		(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+    		m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+    	})(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+    	ga('create', 'UA-49934826-3', 'auto');
+    	ga('send', 'pageview');
+
+    </script>
+
+</div>
+
+<!-- Scripts -->
+<script type="text/javascript" src="./bower_components/jquery/dist/jquery.min.js"></script>
+<script type="text/javascript" src="./bower_components/Chart.js/Chart.min.js"></script>
+<script type="text/javascript" src="./bower_components/angular/angular.min.js"></script>
+<script type="text/javascript" src="./bower_components/angular-highlightjs/angular-highlightjs.min.js"></script>
+<script type="text/javascript" src="./bower_components/angular-chart.js/dist/angular-chart.js"></script>
+<script type="text/javascript" src="./bower_components/highlightjs/highlight.pack.js"></script>
+<script type="text/javascript" src="./bower_components/bootstrap/dist/js/bootstrap.min.js"></script>
+<script type="text/javascript" src="./js/app.config.js"></script>
+<script type="text/javascript" src="./js/app.js"></script>
+<script type="text/javascript" src="./js/controllers/mainController.js"></script>
+<script type="text/javascript" src="./js/directives/typed.js"></script>
+</body>
+</html>

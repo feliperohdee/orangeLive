@@ -1,0 +1,42 @@
+> Cluster {Over 3 data centers}
+
+Os dados são armazenados e replicados através de 3 data centers, a persistência do dado só é validada quando o dado é replicado em pelo menos 2.
+Orange Live provisiona mais recursos quando necessário, tornando sua aplicação altamente escalável, e auto clusterizada.
+
+> Atomic & Array Ops {Increment Decrement}
+
+Suporte a documentos JSON, além de Strings, Numbers, Booleanos, e Listas. Operações atômicas podem ser realizadas em tipos numéricos mesmo em documentos JSON.
+
+> Real Time Binding => Store & Sync
+	> Sort
+
+Todo dado persistido é sincronizado em tempo real com todos os clientes conectados na instância, ou somente aqueles autorizados. Os dados indexados são automaticamente
+reordenados conforme o valor atualizado.
+
+> Rules
+
+Regras contendo ACL's e Schema podem ser definidas para total integridade do banco.
+
+> Client Side
+
+Possibilida de criar aplicações completas sem a necessidade de Server-side, Orange Live pode autenticar e entregar os dados somente aos clientes certos.
+
+> Data is Real Object
+
+Os atributos são objetos reais, com métodos para obter, salvar ou remover dados.
+
+> Self Pagination
+
+A SDK Javascript faz o árduo trbalho de paginar as buscas, só é necessário determinar um limite de atributos.
+
+> Pay per GB n' Connection
+
+Pague apenas pelo que usar, cada tabela pode conter até 10GB de dados, e você pode criar quantas tabelas for necessário.
+
+> Fast key value index
+
+Indexação de dados com chave-valor, isto significa, máxima eficiência nas buscas com índices.
+
+> Easy Query
+
+SDK de fácil compreensão.

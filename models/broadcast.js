@@ -10,7 +10,7 @@ var config = require('.././config.json');
 // Create redis clients
 var redisPub = redis.createClient(_.get(config, 'redis.port', 6379), _.get(config, 'redis.host', '127.0.0.1'));
 var redisSub = redis.createClient(_.get(config, 'redis.port', 6379), _.get(config, 'redis.host', '127.0.0.1'));
-var redisPassword = _.get(config, 'redis.passowrd', false);
+var redisPassword = _.get(config, 'redis.password', false);
 
 if(redisPassword){
     redisPub.auth(redisPassword);

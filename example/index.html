@@ -7,47 +7,47 @@
         <link rel="stylesheet" type="text/css" href="./bower_components/bootstrap/dist/css/bootstrap.min.css">
     </head>
     <body ng-controller="main as Ctrl">
-        
-        <div class="jumbotron">
-            <h1>Hey!</h1>
-            <p>Fork this project <a href="https://github.com/feliperohdee/orangeLive">here!!!</a>a></p>
+        <div class="container">
+            
+            <div class="jumbotron">
+                <h1>Hey!</h1>
+                <p>Fork this project <a href="https://github.com/feliperohdee/orangeLive">here!!!</a>a></p>
+            </div>
+            
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th colspan="2">
+                            <div class="btn-group">
+                                <button class="btn btn-success" ng-click="Ctrl.add()">Add</button>
+                                <button class="btn btn-primary" ng-disabled="!Ctrl.pagination.prev" ng-click="Ctrl.pagination.prev()">Prev</button>
+                                <button class="btn btn-primary" ng-disabled="!Ctrl.pagination.next" ng-click="Ctrl.pagination.next()">Next</button>
+                            </div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr ng-repeat="data in Ctrl.data">
+                        <td>
+                            <span class="label label-primary">{{data.key()}}</span>
+                            <code>{{data.value()}}</code>
+                        </td>
+                        <td>
+                            <div class="btn-group">
+                                <span class="btn btn-sm btn-primary"
+                                ng-click="data.update({finance: {amount: data.value('finance.amount') + 10}})">+ Ammount</span>
+                                
+                                <span class="btn btn-sm btn-primary"
+                                ng-click="data.update({finance: {amount: data.value('finance.amount') - 10}})">- Ammount</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="btn btn-sm btn-danger" ng-click="data.remove()">Remove</span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
-        
-        <table class="table">
-            <thead>
-                <tr>
-                    <th colspan="2">
-                        <div class="btn-group">
-                            <button class="btn btn-success" ng-click="Ctrl.add()">Add</button>
-                            <button class="btn btn-primary" ng-disabled="!Ctrl.pagination.prev" ng-click="Ctrl.pagination.prev()">Prev</button>
-                            <button class="btn btn-primary" ng-disabled="!Ctrl.pagination.next" ng-click="Ctrl.pagination.next()">Next</button>
-                        </div>
-                    </th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr ng-repeat="data in Ctrl.data">
-                    <td>
-                        <span class="label label-primary">{{data.key()}}</span>
-                        <code>{{data.value()}}</code>
-                    </td>
-                    <td>
-                        <div class="btn-group">
-                            <span class="btn btn-sm btn-primary"
-                            ng-click="data.update({finance: {amount: data.value('finance.amount') + 10}})">+ Ammount</span>
-                            
-                            <span class="btn btn-sm btn-primary"
-                            ng-click="data.update({finance: {amount: data.value('finance.amount') - 10}})">- Ammount</span>
-                        </div>
-                    </td>
-                    <td>
-                        <span class="btn btn-sm btn-danger" ng-click="data.remove()">Remove</span>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-        
-        <div id="data"></div>
         
         <!-- Vendor -->
         <script type="text/javascript" src="./bower_components/angular/angular.min.js"></script>

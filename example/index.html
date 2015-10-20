@@ -5,8 +5,13 @@
         <title>Orange Live Example</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, user-scalable=no">
         <link rel="stylesheet" type="text/css" href="./bower_components/bootstrap/dist/css/bootstrap.min.css">
+        <style type="text/css">
+            [ng\:cloak], [ng-cloak], [data-ng-cloak], [x-ng-cloak], .ng-cloak, .x-ng-cloak {
+                display: none !important;
+            }
+        </style>
     </head>
-    <body ng-controller="main as Ctrl">
+    <body ng-controller="main as Ctrl" ng-cloak>
         <div class="container">
             
             <div class="jumbotron">
@@ -30,9 +35,11 @@
                     <tr ng-repeat="data in Ctrl.data">
                         <td>
                             <span class="label label-primary">{{data.key()}}</span>
-                            <code>{{data.value()}}</code>
                         </td>
                         <td>
+                            <code>{{data.value()}}</code>
+                        </td>
+                        <td style="width: 200px;">
                             <div class="btn-group">
                                 <span class="btn btn-sm btn-primary"
                                 ng-click="data.update({finance: {amount: data.value('finance.amount') + 10}})">+ Ammount</span>

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html ng-app="orangelive">
+    <head>
+        <meta charset="UTF-8">
+        <title>Orange Live Example</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, user-scalable=no">
+        <link rel="stylesheet" type="text/css" href="./bower_components/bootstrap/dist/css/bootstrap.min.css">
+    </head>
+    <body ng-controller="main as Ctrl">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th colspan="2">
+                        <div class="btn-group">
+                            <button class="btn btn-success" ng-click="Ctrl.add()">Add</button>
+                            <button class="btn btn-primary" ng-disabled="!Ctrl.pagination.prev" ng-click="Ctrl.pagination.prev()">Prev</button>
+                            <button class="btn btn-primary" ng-disabled="!Ctrl.pagination.next" ng-click="Ctrl.pagination.next()">Next</button>
+                        </div>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr ng-repeat="data in Ctrl.data">
+                    <td>
+                        <span class="label label-primary">{{data.key()}}</span>
+                        <code>{{data.value()}}</code>
+                    </td>
+                    <td>
+                        <div class="btn-group">
+                            <span class="btn btn-sm btn-primary"
+                            ng-click="data.update({finance: {amount: data.value('finance.amount') + 10}})">+ Ammount</span>
+                            
+                            <span class="btn btn-sm btn-primary"
+                            ng-click="data.update({finance: {amount: data.value('finance.amount') - 10}})">- Ammount</span>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="btn btn-sm btn-danger" ng-click="data.remove()">Remove</span>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <div id="data"></div>
+        
+        <!-- Vendor -->
+        <script type="text/javascript" src="./bower_components/angular/angular.min.js"></script>
+        <script type="text/javascript" src="./bower_components/jquery/dist/jquery.min.js"></script>
+        <script type="text/javascript" src="./bower_components/bootstrap/dist/js/bootstrap.min.js"></script>
+        <script type="text/javascript" src="./bower_components/lodash/lodash.min.js"></script>
+        <script type="text/javascript" src="./bower_components/faker/build/build/faker.min.js"></script>
+        
+        <!-- App -->
+        <script type="text/javascript" src="./app/app.js"></script>
+        
+        <!-- Orange Live Start -->
+        <script src="orangeLive/index.js"></script>
+        <script src="orangeLive/instance/index.js"></script>
+        <script src="orangeLive/instance/helpers.js"></script>
+        <script src="orangeLive/instance/collection.js"></script>
+        <script src="orangeLive/instance/item.js"></script>
+        <script src="orangeLive/instance/requests.js"></script>
+        <script src="orangeLive/instance/responses.js"></script>
+        <script src="orangeLive/auth/index.js"></script>
+        <!-- Orange Live End -->
+    </body>
+</html>

@@ -9,7 +9,7 @@ That's a small project which uses Node.js and AWS Dynamo Db (an amazing noSql da
 * Download and install local dynamodb distro (http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Tools.DynamoDBLocal.html)
 * Download and install redis server (http://redis.io/download)
 * Clone this repo
-* At terminal, type 'npm install' in this project folder
+* At terminal, type 'npm install && bower install' in this project folder
 * Create a symbolic link like > 'ln -s [path-to-dynamodb-folder] dynamodb'
 * In your dynamodb folder, create another folder called liveorange
 * Edit config.json with your own rules, and dynamodb settings

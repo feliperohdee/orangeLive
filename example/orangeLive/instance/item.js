@@ -134,7 +134,7 @@
 
         // # Get Dataset
         function getDataSet() {
-            return self.helpers.formatDataset(_dataSet, requestSave);
+            return self.helpers.formatDataset(_dataSet, requestSave, getDataSet);
         }
 
         // # Handle special operations like, atomic or push list operations
@@ -173,7 +173,7 @@
         // # Request Special Update
         function requestSpecialUpdate(special, attribute, value) {
             // Resolve path and get current value
-            var currentValue = self.helpers.getObjectValue(_dataSet, attribute);
+            var currentValue = _.get(_dataSet, attribute);
 
             switch (special) {
                 case 'atomic':

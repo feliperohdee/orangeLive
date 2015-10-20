@@ -1,0 +1,24 @@
+{
+  "name": "orangelive",
+  "version": "0.0.0",
+  "homepage": "https://github.com/feliperohdee/orangeLive",
+  "authors": [
+    "Felipe Rohde <feliperohdee@gmail.com>"
+  ],
+  "description": "A small real time database",
+  "license": "MIT",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "angular": "~1.4.7",
+    "bootstrap": "~3.3.5",
+    "faker": "https://github.com/Marak/faker.js.git#~3.0.1",
+    "jquery": "~2.1.4",
+    "lodash": "~3.10.1"
+  }
+}

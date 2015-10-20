@@ -8,10 +8,8 @@
         return{
             applySpecialOperation: applySpecialOperation,
             formatDataset: formatDataset,
-            getObjectValue: getObjectValue,
             param: param,
-            removeNonSelected: removeNonSelected,
-            setObjectValue: setObjectValue
+            removeNonSelected: removeNonSelected
         };
 
         /*=========================*/
@@ -24,21 +22,21 @@
 
             // Deep dataset clone
             var dataSetClone = _.clone(dataSet, true);
-            var currentValue = getObjectValue(dataSetClone, attribute);
+            var currentValue = _.get(dataSetClone, attribute);
 
             if (!_.isNull(currentValue)) {
                 switch (operation) {
                     case 'atomic':
                         var sum = currentValue + value;
 
-                        return setObjectValue(dataSetClone, attribute, sum);
+                        return _.set(dataSetClone, attribute, sum);
                         break
                     case 'push':
                         var newList = currentValue;
                         newList.push(value);
                         newList = _.uniq(newList.sort());
 
-                        return setObjectValue(dataSetClone, attribute, newList);
+                        return _.set(dataSetClone, attribute, newList);
                         break;
                     case 'removeAttr':
                         delete dataSetClone[attribute];
@@ -51,7 +49,7 @@
         }
 
         // # Format Dataset
-        function formatDataset(data, saveFn) {
+        function formatDataset(data, saveFn, removeFn) {
             return {
                 key: function () {
                     return data.key;
@@ -62,38 +60,17 @@
 
                     saveFn(set, priority);
                 },
+                update: function (set, priority) {
+                    // Merge old data with new data
+                    saveFn(_.merge(data, set), priority);
+                },
+                remove: function () {
+                    removeFn(data.key);
+                },
                 value: function (key) {
-                    return key ? getObjectValue(data, key) : _.omit(data, ['key', 'priority']);
+                    return key ? _.get(data, key) : _.omit(data, ['key', 'priority']);
                 }
             };
-        }
-
-        // Fetch value from object with or without dotted path
-        function getObjectValue(obj, attribute) {
-            if (attribute.indexOf('.') >= 0) {
-                // Handle dotted path
-                var path = attribute.split('.');
-
-                while (path.length > 0) {
-                    var shift = path.shift();
-
-                    // Important test undefined, because 0 might be false
-                    if (_.isUndefined(obj[shift])) {
-                        return null;
-                    }
-
-                    obj = obj[shift];
-                }
-            } else {
-                // Handle simple path
-                if (_.isUndefined(obj[attribute])) {
-                    return null;
-                }
-
-                obj = obj[attribute];
-            }
-
-            return obj;
         }
 
         // # Param
@@ -166,35 +143,6 @@
             });
 
             return result;
-        }
-
-        // Set value to object with or without dotted path
-        function setObjectValue(obj, attribute, value) {
-            // Reference to return
-            var reference = obj;
-
-            if (attribute.indexOf('.') >= 0) {
-                // Handle dotted path
-                var path = attribute.split('.');
-
-                while (path.length > 1) {
-                    var shift = path.shift();
-
-                    // If not exists, create it
-                    if (!obj[shift]) {
-                        obj[shift] = {};
-                    }
-
-                    obj = obj[shift];
-                }
-
-                obj[path.shift()] = value;
-            } else {
-                // Handle simple path
-                obj[attribute] = value;
-            }
-
-            return reference;
         }
     };
 })();

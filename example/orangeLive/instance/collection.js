@@ -223,7 +223,7 @@
             var result = [];
 
             _.each(_dataSet, function (item) {
-                result.push(self.helpers.formatDataset(item, requestSave));
+                result.push(self.helpers.formatDataset(item, requestSave, requestRemove));
             });
 
             return result;
@@ -412,7 +412,7 @@
             _.each(_filters, function (filter, index) {
                 var testCase = filter.operation;
                 var testValue = filter.value;
-                var testedValue = self.helpers.getObjectValue(data, filter.attribute);
+                var testedValue = _.get(data, filter.attribute);
                 var notNull = !_.isNull(testedValue);
 
                 results[index] = {
@@ -483,7 +483,7 @@
                 testValue = [_condition[1], _condition[2]];
             }
 
-            var testedValue = self.helpers.getObjectValue(data, _indexedBy || 'key');
+            var testedValue = _.get(data, _indexedBy || 'key');
             var notNull = !_.isNull(testedValue);
 
             switch (testCase) {

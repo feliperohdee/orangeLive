@@ -390,12 +390,7 @@
         // # Sort and Limit
         function sortAndLimit(data) {
             // Sort
-            data = _.sortBy(data, _indexedBy || 'key');
-
-            // If desc, reverse array
-            if (_desc) {
-                data = data.reverse();
-            }
+            data = _.sortByOrder(data, _indexedBy || 'key', _desc ? 'desc' : 'asc');
 
             // Limit
             if (_limit) {

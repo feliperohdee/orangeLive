@@ -121,14 +121,7 @@ function item(object) {
     }).then(function (itemObject) {
         // Define Select
         if (object.select) {
-            // Split comma's, always include _key
-            var selectArray = object.select.split(',').concat('_key');
-
-            // Build Alias
-            var alias = base.buildAlias(selectArray);
-
-            itemObject.alias = alias.data;
-            itemObject.select = alias.map.names.join();
+            itemObject.select = object.select + ',_key';
         }
 
         return itemObject;
@@ -199,14 +192,7 @@ function query(object) {
             if (object.select === 'COUNT') {
                 queryObject.select = 'COUNT';
             } else {
-                // Split comma's, always include _key
-                var selectArray = object.select.split(',').concat('_key');
-
-                // Build Alias
-                var alias = base.buildAlias(selectArray);
-
-                queryObject.alias = alias.data;
-                queryObject.select = alias.map.names.join();
+                itemObject.select = object.select + ',_key';
             }
         }
 

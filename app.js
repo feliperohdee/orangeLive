@@ -1,4 +1,3 @@
-var debug = require('debug')('orangeLive');
 var express = require('express');
 
 /*==== Servers Config =====*/
@@ -6,7 +5,7 @@ var app = express();
 
 // HTTP Server
 var server = app.listen(process.env.PORT || 3000, function () {
-    debug('Express server listening on port ' + server.address().port);
+    console.log('Express server listening on port ' + server.address().port);
 });
 
 // Web Sockets
@@ -27,7 +26,6 @@ var favicon = require('serve-favicon');
 var logger = require('morgan');
 var bodyParser = require('body-parser');
 var hbs = require('hbs');
-var memory = require('./memory');
 var errors = require('./errors');
 var middleware = require('./middleware');
 var routes = require('./routes');

@@ -1,0 +1,26 @@
+{
+    "rules": {
+        "users": {
+            "acl": {
+                "_save": true,
+                "_remove": true,
+                "_read": true
+            },
+            "indexes": {
+                "string": ["name"],
+                "number": ["height", "age"]
+            },
+            "schema": {
+                "name": "isBoolean(attr('users/rohde1/subscribed')) && isString(data.name)",
+                "age": "isNumber(data.age) && data.age !== 0",
+                "_other": true
+            }
+        }
+    },
+    "dynamodb": {
+        "accessKey": "test",
+        "secretKey": "test",
+        "region": "us-east-1",
+        "endpoint": "http://localhost:9090"
+    }
+}

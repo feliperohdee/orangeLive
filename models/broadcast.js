@@ -3,15 +3,12 @@ var _ = require('lodash');
 var Promise = require('bluebird');
 var redis = require('redis');
 var url = require('url');
-var msgpack = require('msgpack-js');
 var rulesModel = require('./rules');
 var securityModel = require('./security');
 
 // Create redis clients
 var redisPub = redis.createClient(6379, '127.0.0.1');
-var redisSub = redis.createClient(6379, '127.0.0.1', {
-    detect_buffers: true
-});
+var redisSub = redis.createClient(6379, '127.0.0.1');
 
 //
 var clientsByChannel = {}; // Retrieve all clients in a channel and their auth
@@ -62,7 +59,7 @@ function _construct() {
     // Handle redis broacasts
     redisSub.on('message', function (c, response) {
         // Decode and dispatch response
-        _dispatch(msgpack.decode(response));
+        _dispatch(JSON.parse(response));
     });
 }
 
@@ -111,7 +108,7 @@ function _dispatch(response) {
 // # Publish
 function publish(object) {
     // Encode and publish in broadcast
-    return redisPub.publish('broadcast', msgpack.encode(object));
+    return redisPub.publish('broadcast', JSON.stringify(object));
 }
 
 // # Subscribe Client

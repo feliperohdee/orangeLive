@@ -59,8 +59,8 @@ var instance = orangeLive.instance('dlBSd$ib89$Be2/users').indexedBy('age').on('
 
 function add() {
     instance.save({
-        key: 'rohde1',
-        name: 'Rohde Test',
+        key: 'rohde' + +new Date,
+        name: 'Rohde Test 2' + +new Date,
         subscribed: true,
         height: getRandomInt(10, 90),
         age: getRandomInt(105, 110),

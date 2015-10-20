@@ -54,12 +54,7 @@ Evaluator.prototype._attr = function (attr) {
             params.select = '_key';
         }
 
-        // Split comma's, and build alias
-        var selectArray = params.select.split(',');
-        var alias = base.buildAlias(selectArray);
-
-        itemObject.alias = alias.data;
-        itemObject.select = alias.map.names.join();
+        itemObject.select = params.select;
 
         return itemObject;
     }).then(function (itemObject) {
@@ -67,7 +62,7 @@ Evaluator.prototype._attr = function (attr) {
         try {
             return base.item(itemObject).then(function (response) {
                 //
-                response = base.getObjectValue(response.data, params.select);
+                response = _.get(response.data, params.select);
 
                 // Wrap string with comma
                 if (_.isString(response)) {

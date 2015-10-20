@@ -16,7 +16,7 @@ module.exports = {
 
 // # Can Del
 function canDel(params) {
-    var acl = params.rules.acl && params.rules.acl._remove ? params.rules.acl._remove : false;
+    var acl = _.get(params, 'rules.acl._remove', false);
     var evaluator = new Evaluator(params);
 
     return Promise.try(function () {
@@ -34,7 +34,7 @@ function canDel(params) {
 
 // # Can Read
 function canRead(params, isCollection) {
-    var acl = params.rules.acl && params.rules.acl._read ? params.rules.acl._read : false;
+    var acl = _.get(params, 'rules.acl._read', false);
     var evaluator = new Evaluator(params);
 
     return Promise.try(function () {
@@ -65,7 +65,7 @@ function canRead(params, isCollection) {
 // # Can Write
 function canWrite(params) {
     //
-    var acl = params.rules.acl && params.rules.acl._save ? params.rules.acl._save : false;
+    var acl = _.get(params, 'rules.acl._save', false);
     var schema = params.rules.schema;
     var evaluator = new Evaluator(params);
 
@@ -116,7 +116,7 @@ function canWrite(params) {
 // # Filter Clients {use for socket}
 function filterClients(params) {
     //
-    var acl = params.rules.acl && params.rules.acl._read ? params.rules.acl._read : false;
+    var acl = _.get(params, 'rules.acl._read')
     var evaluator = new Evaluator(params);
     var authorizedClients = [];
 

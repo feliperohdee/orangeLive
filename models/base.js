@@ -139,6 +139,8 @@ function _createTables() {
         });
     }).then(function () {
         return returnData;
+    }).catch(function(err) {
+        console.log('Fail on create tables => ', err);
     });
 }
 

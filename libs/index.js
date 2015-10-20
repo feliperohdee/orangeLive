@@ -10,14 +10,20 @@ module.exports = {
 
 // # Dynamo DB
 function startDynamo() {
-    return require('smallorangedynamo')({
+    var endpoint = _.get(config, 'dynamodb.endpoint', false);
+
+    config = {
         credentials: {
             accessKey: _.get(config, 'dynamodb.accessKey', 'test'),
-            secretKey: _.get(config, 'dynamodb.accessKey', 'test'),
+            secretKey: _.get(config, 'dynamodb.secretKey', 'test'),
             region: _.get(config, 'dynamodb.region', 'us-east-1'),
-        },
-        dynamodb: {
-            endpoint: _.get(config, 'dynamodb.endpoint', 'http://localhost:9090')
         }
-    });
+    };
+
+    if (endpoint) {
+        _.set(config, 'dynamodb.endpoint', endpoint);
+    }
+
+    return require('smallorangedynamo')(config);
 }
+

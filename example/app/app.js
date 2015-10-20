@@ -12,7 +12,7 @@
         var orangeLive = new OrangeLive();
 
         // Instance key can be anything
-        var usersCollection = orangeLive.instance('dlBSd$ib89$Be2/users').limit(5).indexedBy('age')
+        var usersCollection = orangeLive.instance('dlBSd$ib89$Be2/users').limit(20).indexedBy('age')
             .on('load', function(data, count, pagination) {
                 $scope.$apply(function() {
                     self.pagination = pagination;

@@ -5,10 +5,17 @@ var redis = require('redis');
 var url = require('url');
 var rulesModel = require('./rules');
 var securityModel = require('./security');
+var config = require('.././config.json');
 
 // Create redis clients
-var redisPub = redis.createClient(6379, '127.0.0.1');
-var redisSub = redis.createClient(6379, '127.0.0.1');
+var redisPub = redis.createClient(_.get(config, 'redis.port', 6379), _.get(config, 'redis.host', '127.0.0.1'));
+var redisSub = redis.createClient(_.get(config, 'redis.port', 6379), _.get(config, 'redis.host', '127.0.0.1'));
+var redisPassword = _.get(config, 'redis.passowrd', false);
+
+if(redisPassword){
+    redisPub.auth(redisPassword);
+    rediredisSubsPub.auth(redisPassword);
+}
 
 //
 var clientsByChannel = {}; // Retrieve all clients in a channel and their auth

@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "start": "node cluster"
+    "start": "node app"
   },
   "dependencies": {
     "MD5": "^1.3.0",

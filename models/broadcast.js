@@ -14,7 +14,7 @@ var redisPassword = _.get(config, 'redis.password', false);
 
 if(redisPassword){
     redisPub.auth(redisPassword);
-    rediredisSubsPub.auth(redisPassword);
+    redisSub.auth(redisPassword);
 }
 
 //

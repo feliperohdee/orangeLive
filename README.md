@@ -12,6 +12,7 @@ That's a small project which uses Node.js and AWS Dynamo Db (an amazing noSql da
 * At terminal, type 'npm install' in this project folder
 * Create a symbolic link like > 'ln -s [path-to-dynamodb-folder] dynamodb'
 * In your dynamodb folder, create another folder called liveorange
+* Edit config.json with your own rules, and dynamodb settings
 * Now, at terminal just type 'grunt dev', this task is going to take care to start, and kill dynamodb, redis and node.js for you
 * In your browser, go to, 'http://localhost:3000'
 * To turn it off, just type Ctrl+C in your terminal
